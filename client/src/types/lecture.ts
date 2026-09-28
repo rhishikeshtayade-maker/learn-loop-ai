@@ -1,9 +1,60 @@
-export type LectureStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+export type LectureStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'AI_PROCESSING' | 'AI_COMPLETED';
 
 export interface TranscriptSegment {
   text: string;
   start: number;
   duration: number;
+}
+
+export interface Concept {
+  id: string;
+  lecture_id?: string;
+  lectureId?: string;
+  name: string;
+  description: string;
+  importance: 'HIGH' | 'MEDIUM' | 'LOW';
+  timestamp_start?: number | null;
+  timestamp_end?: number | null;
+  timestampStart?: number | null;
+  timestampEnd?: number | null;
+  simple_explanation?: string | null;
+  detailed_explanation?: string | null;
+  example?: string | null;
+  common_misconception?: string | null;
+  key_takeaway?: string | null;
+}
+
+export interface SummaryData {
+  overview: string;
+  keyTakeaways: string[];
+  importantDefinitions: string[];
+  importantFacts: string[];
+  formulasOrRules: string[];
+  prerequisites: string[];
+}
+
+export interface Flashcard {
+  id: string;
+  lecture_id?: string;
+  concept_id?: string | null;
+  question: string;
+  answer: string;
+  difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+}
+
+export interface QuizQuestion {
+  id: string;
+  quizId?: string;
+  conceptId?: string | null;
+  question: string;
+  options: string[];
+  difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+}
+
+export interface QuizData {
+  id: string;
+  title: string;
+  questions: QuizQuestion[];
 }
 
 export interface Lecture {
@@ -16,7 +67,7 @@ export interface Lecture {
   duration?: number | null;
   status: LectureStatus;
   errorMessage?: string | null;
-  summary?: string | null;
+  summary?: SummaryData | string | null;
   createdAt: string;
   updatedAt: string;
   _count?: {
@@ -37,4 +88,11 @@ export interface LecturesResponse {
 
 export interface LectureDetailResponse {
   lecture: Lecture;
+}
+
+export interface LearningContentResponse {
+  lecture: Partial<Lecture>;
+  concepts: Concept[];
+  flashcards: Flashcard[];
+  quiz: QuizData | null;
 }

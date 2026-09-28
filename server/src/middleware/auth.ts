@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../utils/jwt';
+import { getSupabaseAdmin } from '../services/supabase/supabaseAdmin';
+import db from '../services/supabase/database';
 import prisma from '../prisma';
 
 export interface AuthRequest extends Request {
@@ -29,6 +31,24 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
       return;
     }
 
+    const sb = getSupabaseAdmin();
+    if (sb) {
+      // 1. Authenticate with Supabase Auth
+      const { data: { user: sbUser }, error } = await sb.auth.getUser(token);
+      if (!error && sbUser) {
+        // Retrieve profile from database
+        const profile = await db.getProfile(sbUser.id);
+        req.user = {
+          id: sbUser.id,
+          email: sbUser.email || '',
+          name: profile?.name || sbUser.user_metadata?.name || 'Student',
+        };
+        next();
+        return;
+      }
+    }
+
+    // 2. Fallback to JWT verification if Supabase Auth check token wasn't a Supabase session or running locally
     const decoded = verifyToken(token);
     if (!decoded || !decoded.userId) {
       res.status(401).json({ error: 'Session expired or invalid. Please log in again.' });

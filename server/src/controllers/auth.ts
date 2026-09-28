@@ -5,6 +5,8 @@ import { registerSchema, loginSchema } from '../schemas/auth';
 import { generateToken } from '../utils/jwt';
 import { AuthRequest, AUTH_COOKIE_NAME } from '../middleware/auth';
 import config from '../config';
+import { getSupabaseAdmin } from '../services/supabase/supabaseAdmin';
+import db from '../services/supabase/database';
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -25,7 +27,54 @@ export async function register(req: Request, res: Response): Promise<void> {
 
     const { name, email, password } = parseResult.data;
 
-    // Check existing email
+    const sb = getSupabaseAdmin();
+    if (sb) {
+      // 1. Supabase Auth Registration
+      const { data, error } = await sb.auth.admin.createUser({
+        email,
+        password,
+        user_metadata: { name },
+        email_confirm: true,
+      });
+
+      if (error || !data.user) {
+        if (error?.message?.toLowerCase().includes('already registered')) {
+          res.status(409).json({ error: 'An account with this email address already exists.' });
+          return;
+        }
+        res.status(400).json({ error: error?.message || 'Registration failed' });
+        return;
+      }
+
+      const user = data.user;
+      
+      // Ensure profile exists in public.profiles table
+      await sb.from('profiles').upsert({
+        id: user.id,
+        name,
+        updated_at: new Date().toISOString(),
+      });
+
+      // Sign in to get session token
+      const { data: sessionData } = await sb.auth.signInWithPassword({ email, password });
+      const token = sessionData.session?.access_token || generateToken({ userId: user.id, email: user.email! });
+
+      res.cookie(AUTH_COOKIE_NAME, token, COOKIE_OPTIONS);
+
+      res.status(201).json({
+        message: 'Account created successfully',
+        user: {
+          id: user.id,
+          name,
+          email: user.email,
+          createdAt: user.created_at,
+        },
+        token,
+      });
+      return;
+    }
+
+    // 2. Fallback to Local Auth (Prisma)
     const existing = await prisma.user.findUnique({
       where: { email },
     });
@@ -35,10 +84,8 @@ export async function register(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Hash password securely with 12 rounds
     const passwordHash = await bcrypt.hash(password, 12);
 
-    // Create user in database
     const user = await prisma.user.create({
       data: {
         name,
@@ -53,19 +100,17 @@ export async function register(req: Request, res: Response): Promise<void> {
       },
     });
 
-    // Generate JWT token
     const token = generateToken({
       userId: user.id,
       email: user.email,
     });
 
-    // Set secure HTTP-only cookie
     res.cookie(AUTH_COOKIE_NAME, token, COOKIE_OPTIONS);
 
     res.status(201).json({
       message: 'Account created successfully',
       user,
-      token, // also provided for clients choosing Bearer header
+      token,
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -84,7 +129,35 @@ export async function login(req: Request, res: Response): Promise<void> {
 
     const { email, password } = parseResult.data;
 
-    // Find user
+    const sb = getSupabaseAdmin();
+    if (sb) {
+      // 1. Supabase Auth Login
+      const { data, error } = await sb.auth.signInWithPassword({ email, password });
+      if (error || !data.user || !data.session) {
+        res.status(401).json({ error: 'Invalid email or password.' });
+        return;
+      }
+
+      const user = data.user;
+      const profile = await db.getProfile(user.id);
+      const token = data.session.access_token;
+
+      res.cookie(AUTH_COOKIE_NAME, token, COOKIE_OPTIONS);
+
+      res.json({
+        message: 'Logged in successfully',
+        user: {
+          id: user.id,
+          name: profile?.name || user.user_metadata?.name || 'Student',
+          email: user.email,
+          createdAt: user.created_at,
+        },
+        token,
+      });
+      return;
+    }
+
+    // 2. Fallback Local Auth (Prisma)
     const user = await prisma.user.findUnique({
       where: { email },
     });
@@ -94,20 +167,17 @@ export async function login(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Verify password hash
     const isValid = await bcrypt.compare(password, user.passwordHash);
     if (!isValid) {
       res.status(401).json({ error: 'Invalid email or password.' });
       return;
     }
 
-    // Generate JWT
     const token = generateToken({
       userId: user.id,
       email: user.email,
     });
 
-    // Set HTTP-only cookie
     res.cookie(AUTH_COOKIE_NAME, token, COOKIE_OPTIONS);
 
     res.json({
@@ -143,30 +213,15 @@ export async function me(req: AuthRequest, res: Response): Promise<void> {
   }
 
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        createdAt: true,
-        _count: {
-          select: {
-            lectures: true,
-            quizAttempts: true,
-            conceptMasteries: true,
-            revisionTasks: true,
-          },
-        },
+    const profile = await db.getProfile(req.user.id);
+
+    res.json({
+      user: {
+        id: req.user.id,
+        name: profile?.name || req.user.name,
+        email: req.user.email,
       },
     });
-
-    if (!user) {
-      res.status(404).json({ error: 'User not found' });
-      return;
-    }
-
-    res.json({ user });
   } catch (error) {
     console.error('Me endpoint error:', error);
     res.status(500).json({ error: 'Failed to fetch current user session' });
