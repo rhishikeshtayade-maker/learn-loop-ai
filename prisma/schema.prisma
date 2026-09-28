@@ -1,0 +1,144 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../server/node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String           @id @default(uuid())
+  name             String
+  email            String           @unique
+  passwordHash     String
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  lectures         Lecture[]
+  quizAttempts     QuizAttempt[]
+  conceptMasteries ConceptMastery[]
+  revisionTasks    RevisionTask[]
+}
+
+model Lecture {
+  id                 String      @id @default(uuid())
+  userId             String
+  user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  youtubeUrl         String
+  title              String
+  transcript         String
+  transcriptSegments String?     // JSON array of segments [{ text, start, duration }]
+  duration           Int?
+  status             String      @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  errorMessage       String?     // Safe processing error message
+  summary            String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  concepts           Concept[]
+  flashcards         Flashcard[]
+  quizzes            Quiz[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Concept {
+  id               String           @id @default(uuid())
+  lectureId        String
+  lecture          Lecture          @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+  name             String
+  description      String
+  importance       String           @default("MEDIUM") // HIGH, MEDIUM, LOW
+  timestampStart   Int?
+  timestampEnd     Int?
+  flashcards       Flashcard[]
+  quizQuestions    QuizQuestion[]
+  conceptMasteries ConceptMastery[]
+  revisionTasks    RevisionTask[]
+}
+
+model Flashcard {
+  id         String   @id @default(uuid())
+  lectureId  String
+  lecture    Lecture  @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+  conceptId  String?
+  concept    Concept? @relation(fields: [conceptId], references: [id], onDelete: SetNull)
+  question   String
+  answer     String
+  difficulty String   @default("MEDIUM") // EASY, MEDIUM, HARD
+}
+
+model Quiz {
+  id        String         @id @default(uuid())
+  lectureId String
+  lecture   Lecture        @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+  title     String
+  createdAt DateTime       @default(now())
+  questions QuizQuestion[]
+  attempts  QuizAttempt[]
+}
+
+model QuizQuestion {
+  id            String       @id @default(uuid())
+  quizId        String
+  quiz          Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  conceptId     String?
+  concept       Concept?     @relation(fields: [conceptId], references: [id], onDelete: SetNull)
+  question      String
+  options       String       // JSON-encoded array of options ["A", "B", "C", "D"]
+  correctAnswer Int          // 0-indexed index of options
+  explanation   String
+  difficulty    String       @default("MEDIUM") // EASY, MEDIUM, HARD
+  answers       QuizAnswer[]
+}
+
+model QuizAttempt {
+  id          String       @id @default(uuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quizId      String
+  quiz        Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  score       Int          @default(0)
+  startedAt   DateTime     @default(now())
+  completedAt DateTime?
+  answers     QuizAnswer[]
+}
+
+model QuizAnswer {
+  id             String       @id @default(uuid())
+  attemptId      String
+  attempt        QuizAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId     String
+  question       QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedAnswer Int
+  isCorrect      Boolean
+}
+
+model ConceptMastery {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conceptId      String
+  concept        Concept  @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  masteryScore   Float    @default(0) // 0 to 100 percentage
+  correctCount   Int      @default(0)
+  incorrectCount Int      @default(0)
+  lastReviewedAt DateTime @default(now())
+  nextReviewAt   DateTime @default(now())
+
+  @@unique([userId, conceptId])
+}
+
+model RevisionTask {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conceptId    String
+  concept      Concept  @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  taskType     String   @default("TARGETED_REVISION")
+  content      String?  // JSON stringified revision object (explanation, key idea, misconception, mini-q, etc.)
+  scheduledFor DateTime @default(now())
+  completed    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+}
