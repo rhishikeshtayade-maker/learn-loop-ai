@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import ws from 'ws';
 import config from '../../config';
 
 let supabaseAdminClient: SupabaseClient | null = null;
@@ -15,6 +16,9 @@ export function getSupabaseAdmin(): SupabaseClient | null {
         autoRefreshToken: false,
         persistSession: false,
       },
+      realtime: {
+        transport: ws as any,
+      },
     });
     return supabaseAdminClient;
   }
@@ -23,3 +27,4 @@ export function getSupabaseAdmin(): SupabaseClient | null {
 }
 
 export const supabaseAdmin = getSupabaseAdmin();
+

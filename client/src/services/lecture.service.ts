@@ -120,4 +120,79 @@ export const lectureService = {
       };
     }>(`/api/quiz-attempts/${attemptId}/result`);
   },
+
+  // Phase 6 Concept Mastery & Revision Task Methods
+  async getConceptMastery(conceptId?: string) {
+    const url = conceptId ? `/api/mastery?conceptId=${encodeURIComponent(conceptId)}` : '/api/mastery';
+    return apiRequest<{ success: boolean; mastery: any[] }>(url);
+  },
+
+  async getRevisionTasks(includeCompleted = false) {
+    const url = includeCompleted ? '/api/revision-tasks?includeCompleted=true' : '/api/revision-tasks';
+    return apiRequest<{ success: boolean; tasks: any[] }>(url);
+  },
+
+  // Phase 7 Adaptive Student Dashboard Method
+  async getDashboardData() {
+    return apiRequest<{
+      success: boolean;
+      user: { id: string; name: string; email: string };
+      stats: {
+        totalLectures: number;
+        quizzesAttempted: number;
+        averageScore: number;
+        conceptsMastered: number;
+      };
+      mastery: Array<{
+        id: string;
+        user_id: string;
+        concept_id: string;
+        concept_name: string;
+        lecture_id?: string | null;
+        mastery_score: number;
+        correct_count: number;
+        incorrect_count: number;
+        last_reviewed_at: string;
+        next_review_at: string;
+      }>;
+      weakConcepts: Array<{
+        id: string;
+        user_id: string;
+        concept_id: string;
+        concept_name: string;
+        lecture_id?: string | null;
+        mastery_score: number;
+        correct_count: number;
+        incorrect_count: number;
+        last_reviewed_at: string;
+        next_review_at: string;
+      }>;
+      revisionTasks: Array<{
+        id: string;
+        user_id: string;
+        concept_id: string;
+        concept_name: string;
+        lecture_id?: string | null;
+        task_type: string;
+        mastery_score: number;
+        content: any;
+        scheduled_for: string;
+        completed: boolean;
+        created_at?: string;
+      }>;
+      upcomingReviews: Array<{
+        id: string;
+        user_id: string;
+        concept_id: string;
+        concept_name: string;
+        lecture_id?: string | null;
+        mastery_score: number;
+        correct_count: number;
+        incorrect_count: number;
+        last_reviewed_at: string;
+        next_review_at: string;
+      }>;
+      recentLectures: Lecture[];
+    }>('/api/dashboard');
+  },
 };

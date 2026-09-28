@@ -90,6 +90,28 @@ export interface QuizAnswerRecord {
   is_correct: boolean;
 }
 
+export interface ConceptMasteryRecord {
+  id: string;
+  user_id: string;
+  concept_id: string;
+  mastery_score: number;
+  correct_count: number;
+  incorrect_count: number;
+  last_reviewed_at: string;
+  next_review_at: string;
+}
+
+export interface RevisionTaskRecord {
+  id: string;
+  user_id: string;
+  concept_id: string;
+  task_type: string;
+  content: any;
+  scheduled_for: string;
+  completed: boolean;
+  created_at?: string;
+}
+
 class SupabaseDatabaseService {
   /**
    * Helper to determine whether Supabase Cloud is active
@@ -125,25 +147,40 @@ class SupabaseDatabaseService {
   async createLecture(data: { userId: string; youtubeUrl: string; title: string }): Promise<LectureRecord> {
     const sb = getSupabaseAdmin();
     if (sb) {
-      const { data: created, error } = await sb
-        .from('lectures')
-        .insert({
-          user_id: data.userId,
-          youtube_url: data.youtubeUrl,
-          title: data.title,
-          transcript: '',
-          status: 'PENDING',
-        })
-        .select('*')
-        .single();
+      try {
+        const { data: created, error } = await sb
+          .from('lectures')
+          .insert({
+            user_id: data.userId,
+            youtube_url: data.youtubeUrl,
+            title: data.title,
+            transcript: '',
+            status: 'PENDING',
+          })
+          .select('*')
+          .single();
 
-      if (error || !created) {
-        throw new Error(`Supabase createLecture error: ${error?.message}`);
+        if (!error && created) {
+          return created;
+        }
+        console.warn(`Supabase createLecture failed (${error?.message}). Falling back to Prisma...`);
+      } catch (sbErr) {
+        console.warn('Supabase createLecture exception, falling back to Prisma:', sbErr);
       }
-      return created;
     }
 
     // Prisma Fallback
+    await prisma.user.upsert({
+      where: { id: data.userId },
+      create: {
+        id: data.userId,
+        email: `${data.userId}@placeholder.local`,
+        name: 'Student',
+        passwordHash: '',
+      },
+      update: {},
+    }).catch(() => {});
+
     const created = await prisma.lecture.create({
       data: {
         userId: data.userId,
@@ -169,27 +206,32 @@ class SupabaseDatabaseService {
   async getLecturesByUser(userId: string): Promise<LectureRecord[]> {
     const sb = getSupabaseAdmin();
     if (sb) {
-      const { data, error } = await sb
-        .from('lectures')
-        .select(`
-          *,
-          concepts:concepts(count),
-          flashcards:flashcards(count),
-          quizzes:quizzes(count)
-        `)
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+      try {
+        const { data, error } = await sb
+          .from('lectures')
+          .select(`
+            *,
+            concepts:concepts(count),
+            flashcards:flashcards(count),
+            quizzes:quizzes(count)
+          `)
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
 
-      if (error) throw new Error(`Supabase getLecturesByUser error: ${error.message}`);
-      
-      return (data || []).map((row: any) => ({
-        ...row,
-        _count: {
-          concepts: row.concepts?.[0]?.count || 0,
-          flashcards: row.flashcards?.[0]?.count || 0,
-          quizzes: row.quizzes?.[0]?.count || 0,
-        },
-      }));
+        if (!error && data) {
+          return data.map((row: any) => ({
+            ...row,
+            _count: {
+              concepts: row.concepts?.[0]?.count || 0,
+              flashcards: row.flashcards?.[0]?.count || 0,
+              quizzes: row.quizzes?.[0]?.count || 0,
+            },
+          }));
+        }
+        console.warn(`Supabase getLecturesByUser failed (${error?.message}). Falling back to Prisma...`);
+      } catch (sbErr) {
+        console.warn('Supabase getLecturesByUser exception, falling back to Prisma:', sbErr);
+      }
     }
 
     // Prisma Fallback
@@ -223,27 +265,33 @@ class SupabaseDatabaseService {
   async getLectureById(id: string, userId: string): Promise<LectureRecord | null> {
     const sb = getSupabaseAdmin();
     if (sb) {
-      const { data, error } = await sb
-        .from('lectures')
-        .select(`
-          *,
-          concepts:concepts(count),
-          flashcards:flashcards(count),
-          quizzes:quizzes(count)
-        `)
-        .eq('id', id)
-        .eq('user_id', userId)
-        .single();
+      try {
+        const { data, error } = await sb
+          .from('lectures')
+          .select(`
+            *,
+            concepts:concepts(count),
+            flashcards:flashcards(count),
+            quizzes:quizzes(count)
+          `)
+          .eq('id', id)
+          .eq('user_id', userId)
+          .single();
 
-      if (error || !data) return null;
-      return {
-        ...data,
-        _count: {
-          concepts: data.concepts?.[0]?.count || 0,
-          flashcards: data.flashcards?.[0]?.count || 0,
-          quizzes: data.quizzes?.[0]?.count || 0,
-        },
-      };
+        if (!error && data) {
+          return {
+            ...data,
+            _count: {
+              concepts: data.concepts?.[0]?.count || 0,
+              flashcards: data.flashcards?.[0]?.count || 0,
+              quizzes: data.quizzes?.[0]?.count || 0,
+            },
+          };
+        }
+        console.warn(`Supabase getLectureById failed (${error?.message}). Falling back to Prisma...`);
+      } catch (sbErr) {
+        console.warn('Supabase getLectureById exception, falling back to Prisma:', sbErr);
+      }
     }
 
     // Prisma Fallback
@@ -283,15 +331,20 @@ class SupabaseDatabaseService {
   async updateLectureStatus(id: string, status: string, errorMessage?: string | null): Promise<void> {
     const sb = getSupabaseAdmin();
     if (sb) {
-      await sb
-        .from('lectures')
-        .update({
-          status,
-          error_message: errorMessage || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id);
-      return;
+      try {
+        const { error } = await sb
+          .from('lectures')
+          .update({
+            status,
+            error_message: errorMessage || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', id);
+        if (!error) return;
+        console.warn(`Supabase updateLectureStatus failed (${error?.message}). Falling back to Prisma...`);
+      } catch (sbErr) {
+        console.warn('Supabase updateLectureStatus exception, falling back to Prisma:', sbErr);
+      }
     }
 
     // Prisma Fallback
@@ -307,18 +360,23 @@ class SupabaseDatabaseService {
   async saveLectureTranscript(id: string, transcript: string, segments: any[], duration?: number): Promise<void> {
     const sb = getSupabaseAdmin();
     if (sb) {
-      await sb
-        .from('lectures')
-        .update({
-          status: 'COMPLETED',
-          transcript,
-          transcript_segments: segments,
-          duration: duration || null,
-          error_message: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id);
-      return;
+      try {
+        const { error } = await sb
+          .from('lectures')
+          .update({
+            status: 'COMPLETED',
+            transcript,
+            transcript_segments: segments,
+            duration: duration || null,
+            error_message: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', id);
+        if (!error) return;
+        console.warn(`Supabase saveLectureTranscript failed (${error?.message}). Falling back to Prisma...`);
+      } catch (sbErr) {
+        console.warn('Supabase saveLectureTranscript exception, falling back to Prisma:', sbErr);
+      }
     }
 
     // Prisma Fallback
@@ -930,6 +988,20 @@ class SupabaseDatabaseService {
         throw new Error(`Failed to update quiz attempt: ${attErr?.message}`);
       }
 
+      // Update Concept Mastery for answered questions
+      for (const ans of answers) {
+        const qRecord = questionMap.get(ans.questionId);
+        const conceptId = qRecord?.concept_id;
+        if (conceptId) {
+          const isCorrect = ans.selectedAnswer === qRecord.correct_answer;
+          try {
+            await this.updateConceptMastery(userId, conceptId, isCorrect);
+          } catch (mErr) {
+            console.error(`Error updating concept mastery for concept ${conceptId}:`, mErr);
+          }
+        }
+      }
+
       return {
         attempt: updatedAttempt,
         score: percentageScore,
@@ -959,6 +1031,20 @@ class SupabaseDatabaseService {
         completedAt: new Date(completedAtIso),
       },
     });
+
+    // Update Concept Mastery for answered questions (Prisma Fallback)
+    for (const ans of answers) {
+      const qRecord = questionMap.get(ans.questionId);
+      const conceptId = qRecord?.concept_id;
+      if (conceptId) {
+        const isCorrect = ans.selectedAnswer === qRecord.correct_answer;
+        try {
+          await this.updateConceptMastery(userId, conceptId, isCorrect);
+        } catch (mErr) {
+          console.error(`Error updating concept mastery for concept ${conceptId}:`, mErr);
+        }
+      }
+    }
 
     return {
       attempt: {
@@ -1034,6 +1120,504 @@ class SupabaseDatabaseService {
       totalQuestions,
       startedAt: attempt.started_at,
       completedAt: attempt.completed_at,
+    };
+  }
+
+  // =========================================
+  // CONCEPT MASTERY & REVISION TASKS (PHASE 6)
+  // =========================================
+  async updateConceptMastery(
+    userId: string,
+    conceptId: string,
+    isCorrect: boolean
+  ): Promise<ConceptMasteryRecord> {
+    const sb = getSupabaseAdmin();
+    if (sb) {
+      const { data: existing } = await sb
+        .from('concept_mastery')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('concept_id', conceptId)
+        .maybeSingle();
+
+      const correctCount = (existing?.correct_count || 0) + (isCorrect ? 1 : 0);
+      const incorrectCount = (existing?.incorrect_count || 0) + (isCorrect ? 0 : 1);
+      const total = correctCount + incorrectCount;
+      const masteryScore = total > 0 ? Math.round((correctCount / total) * 100) : 0;
+
+      let daysToAdd = 1;
+      if (masteryScore >= 80) {
+        daysToAdd = 7;
+      } else if (masteryScore >= 60) {
+        daysToAdd = 3;
+      }
+
+      const lastReviewedAt = new Date().toISOString();
+      const nextReviewAt = new Date(Date.now() + daysToAdd * 24 * 60 * 60 * 1000).toISOString();
+
+      const { data: updated, error } = await sb
+        .from('concept_mastery')
+        .upsert(
+          {
+            user_id: userId,
+            concept_id: conceptId,
+            mastery_score: masteryScore,
+            correct_count: correctCount,
+            incorrect_count: incorrectCount,
+            last_reviewed_at: lastReviewedAt,
+            next_review_at: nextReviewAt,
+          },
+          { onConflict: 'user_id,concept_id' }
+        )
+        .select('*')
+        .single();
+
+      if (error || !updated) {
+        throw new Error(`Failed to update concept mastery: ${error?.message}`);
+      }
+
+      if (masteryScore < 60) {
+        await this.createRevisionTask(userId, conceptId, masteryScore, nextReviewAt);
+      }
+
+      return updated;
+    }
+
+    // Prisma Fallback
+    const existing = await prisma.conceptMastery.findUnique({
+      where: {
+        userId_conceptId: {
+          userId,
+          conceptId,
+        },
+      },
+    });
+
+    const correctCount = (existing?.correctCount || 0) + (isCorrect ? 1 : 0);
+    const incorrectCount = (existing?.incorrectCount || 0) + (isCorrect ? 0 : 1);
+    const total = correctCount + incorrectCount;
+    const masteryScore = total > 0 ? Math.round((correctCount / total) * 100) : 0;
+
+    let daysToAdd = 1;
+    if (masteryScore >= 80) {
+      daysToAdd = 7;
+    } else if (masteryScore >= 60) {
+      daysToAdd = 3;
+    }
+
+    const lastReviewedAt = new Date();
+    const nextReviewAt = new Date(Date.now() + daysToAdd * 24 * 60 * 60 * 1000);
+
+    const updated = await prisma.conceptMastery.upsert({
+      where: {
+        userId_conceptId: {
+          userId,
+          conceptId,
+        },
+      },
+      create: {
+        userId,
+        conceptId,
+        masteryScore,
+        correctCount,
+        incorrectCount,
+        lastReviewedAt,
+        nextReviewAt,
+      },
+      update: {
+        masteryScore,
+        correctCount,
+        incorrectCount,
+        lastReviewedAt,
+        nextReviewAt,
+      },
+    });
+
+    if (masteryScore < 60) {
+      await this.createRevisionTask(userId, conceptId, masteryScore, nextReviewAt.toISOString());
+    }
+
+    return {
+      id: updated.id,
+      user_id: updated.userId,
+      concept_id: updated.conceptId,
+      mastery_score: updated.masteryScore,
+      correct_count: updated.correctCount,
+      incorrect_count: updated.incorrectCount,
+      last_reviewed_at: updated.lastReviewedAt.toISOString(),
+      next_review_at: updated.nextReviewAt.toISOString(),
+    };
+  }
+
+  async createRevisionTask(
+    userId: string,
+    conceptId: string,
+    masteryScore: number,
+    scheduledFor?: string
+  ): Promise<RevisionTaskRecord> {
+    const sb = getSupabaseAdmin();
+    const contentObj = {
+      reason: 'Weak concept detected from quiz performance',
+      masteryScore,
+      recommendedAction: 'Review this concept and retry related questions',
+    };
+
+    if (sb) {
+      // Check for existing unfinished revision task to prevent duplicates
+      const { data: existingTask } = await sb
+        .from('revision_tasks')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('concept_id', conceptId)
+        .eq('completed', false)
+        .maybeSingle();
+
+      if (existingTask) {
+        return existingTask;
+      }
+
+      const { data: created, error } = await sb
+        .from('revision_tasks')
+        .insert({
+          user_id: userId,
+          concept_id: conceptId,
+          task_type: 'TARGETED_REVISION',
+          content: contentObj,
+          scheduled_for: scheduledFor || new Date().toISOString(),
+          completed: false,
+        })
+        .select('*')
+        .single();
+
+      if (error || !created) {
+        throw new Error(`Failed to create revision task: ${error?.message}`);
+      }
+      return created;
+    }
+
+    // Prisma Fallback
+    const existingTask = await prisma.revisionTask.findFirst({
+      where: {
+        userId,
+        conceptId,
+        completed: false,
+      },
+    });
+
+    if (existingTask) {
+      return {
+        id: existingTask.id,
+        user_id: existingTask.userId,
+        concept_id: existingTask.conceptId,
+        task_type: existingTask.taskType,
+        content: existingTask.content ? JSON.parse(existingTask.content) : null,
+        scheduled_for: existingTask.scheduledFor.toISOString(),
+        completed: existingTask.completed,
+        created_at: existingTask.createdAt.toISOString(),
+      };
+    }
+
+    const created = await prisma.revisionTask.create({
+      data: {
+        userId,
+        conceptId,
+        taskType: 'TARGETED_REVISION',
+        content: JSON.stringify(contentObj),
+        scheduledFor: scheduledFor ? new Date(scheduledFor) : new Date(),
+        completed: false,
+      },
+    });
+
+    return {
+      id: created.id,
+      user_id: created.userId,
+      concept_id: created.conceptId,
+      task_type: created.taskType,
+      content: contentObj,
+      scheduled_for: created.scheduledFor.toISOString(),
+      completed: created.completed,
+      created_at: created.createdAt.toISOString(),
+    };
+  }
+
+  async getConceptMastery(userId: string, conceptId?: string): Promise<ConceptMasteryRecord[]> {
+    const sb = getSupabaseAdmin();
+    if (sb) {
+      try {
+        let query = sb.from('concept_mastery').select('*').eq('user_id', userId);
+        if (conceptId) {
+          query = query.eq('concept_id', conceptId);
+        }
+
+        const { data, error } = await query.order('last_reviewed_at', { ascending: false });
+        if (!error && data) return data;
+        console.warn(`Supabase getConceptMastery failed (${error?.message}). Falling back to Prisma...`);
+      } catch (err) {
+        console.warn('Supabase getConceptMastery exception, falling back to Prisma:', err);
+      }
+    }
+
+    // Prisma Fallback
+    const whereClause: any = { userId };
+    if (conceptId) whereClause.conceptId = conceptId;
+
+    const list = await prisma.conceptMastery.findMany({
+      where: whereClause,
+      orderBy: { lastReviewedAt: 'desc' },
+    });
+
+    return list.map((m) => ({
+      id: m.id,
+      user_id: m.userId,
+      concept_id: m.conceptId,
+      mastery_score: m.masteryScore,
+      correct_count: m.correctCount,
+      incorrect_count: m.incorrectCount,
+      last_reviewed_at: m.lastReviewedAt.toISOString(),
+      next_review_at: m.nextReviewAt.toISOString(),
+    }));
+  }
+
+  async getRevisionTasks(userId: string, includeCompleted?: boolean): Promise<RevisionTaskRecord[]> {
+    const sb = getSupabaseAdmin();
+    if (sb) {
+      try {
+        let query = sb.from('revision_tasks').select('*').eq('user_id', userId);
+        if (!includeCompleted) {
+          query = query.eq('completed', false);
+        }
+
+        const { data, error } = await query.order('scheduled_for', { ascending: true });
+        if (!error && data) return data;
+        console.warn(`Supabase getRevisionTasks failed (${error?.message}). Falling back to Prisma...`);
+      } catch (err) {
+        console.warn('Supabase getRevisionTasks exception, falling back to Prisma:', err);
+      }
+    }
+
+    // Prisma Fallback
+    const whereClause: any = { userId };
+    if (!includeCompleted) {
+      whereClause.completed = false;
+    }
+
+    const list = await prisma.revisionTask.findMany({
+      where: whereClause,
+      orderBy: { scheduledFor: 'asc' },
+    });
+
+    return list.map((t) => ({
+      id: t.id,
+      user_id: t.userId,
+      concept_id: t.conceptId,
+      task_type: t.taskType,
+      content: t.content ? JSON.parse(t.content) : null,
+      scheduled_for: t.scheduledFor.toISOString(),
+      completed: t.completed,
+      created_at: t.createdAt.toISOString(),
+    }));
+  }
+
+  async getDashboardData(userId: string) {
+    const sb = getSupabaseAdmin();
+    if (sb) {
+      try {
+        // 1. Fetch Lectures
+        const { data: lectures, error: lecErr } = await sb
+          .from('lectures')
+          .select('*, concepts:concepts(count), flashcards:flashcards(count), quizzes:quizzes(count)')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
+
+        if (!lecErr && lectures && lectures.length > 0) {
+          const formattedLectures = lectures.map((l: any) => ({
+            ...l,
+            _count: {
+              concepts: l.concepts?.[0]?.count || 0,
+              flashcards: l.flashcards?.[0]?.count || 0,
+              quizzes: l.quizzes?.[0]?.count || 0,
+            },
+          }));
+
+          // 2. Fetch Quiz Attempts
+          const { data: quizAttempts } = await sb
+            .from('quiz_attempts')
+            .select('*')
+            .eq('user_id', userId);
+
+          const quizzesAttempted = quizAttempts?.length || 0;
+          let averageScore = 0;
+          if (quizzesAttempted > 0) {
+            const totalScore = quizAttempts!.reduce((sum: number, a: any) => sum + (a.score || 0), 0);
+            averageScore = Math.round(totalScore / quizzesAttempted);
+          }
+
+          // 3. Fetch Concept Mastery with Concept details
+          const { data: masteryData } = await sb
+            .from('concept_mastery')
+            .select('*, concept:concepts(id, name, lecture_id)')
+            .eq('user_id', userId)
+            .order('last_reviewed_at', { ascending: false });
+
+          const mastery = (masteryData || []).map((m: any) => ({
+            id: m.id,
+            user_id: m.user_id,
+            concept_id: m.concept_id,
+            concept_name: m.concept?.name || 'Concept',
+            lecture_id: m.concept?.lecture_id || null,
+            mastery_score: m.mastery_score,
+            correct_count: m.correct_count,
+            incorrect_count: m.incorrect_count,
+            last_reviewed_at: m.last_reviewed_at,
+            next_review_at: m.next_review_at,
+          }));
+
+          const conceptsMastered = mastery.filter((m) => m.mastery_score >= 80).length;
+          const weakConcepts = mastery.filter((m) => m.mastery_score < 60);
+
+          // 4. Fetch Revision Tasks with Concept details
+          const { data: taskData } = await sb
+            .from('revision_tasks')
+            .select('*, concept:concepts(id, name, lecture_id)')
+            .eq('user_id', userId)
+            .eq('completed', false)
+            .order('scheduled_for', { ascending: true });
+
+          const revisionTasks = (taskData || []).map((t: any) => {
+            const matchingMastery = mastery.find((m) => m.concept_id === t.concept_id);
+            return {
+              id: t.id,
+              user_id: t.user_id,
+              concept_id: t.concept_id,
+              concept_name: t.concept?.name || 'Concept',
+              lecture_id: t.concept?.lecture_id || null,
+              task_type: t.task_type,
+              mastery_score: matchingMastery?.mastery_score ?? 0,
+              content: t.content,
+              scheduled_for: t.scheduled_for,
+              completed: t.completed,
+              created_at: t.created_at,
+            };
+          });
+
+          // 5. Upcoming Reviews sorted by earliest next_review_at
+          const upcomingReviews = [...mastery].sort(
+            (a, b) => new Date(a.next_review_at).getTime() - new Date(b.next_review_at).getTime()
+          );
+
+          return {
+            stats: {
+              totalLectures: formattedLectures.length,
+              quizzesAttempted,
+              averageScore,
+              conceptsMastered,
+            },
+            mastery,
+            weakConcepts,
+            revisionTasks,
+            upcomingReviews,
+            recentLectures: formattedLectures.slice(0, 5),
+          };
+        }
+      } catch (err) {
+        console.warn('Supabase getDashboardData failed, falling back to Prisma:', err);
+      }
+    }
+
+    // Prisma Fallback
+    const [lectures, quizAttempts, masteryList, revisionTaskList] = await Promise.all([
+      prisma.lecture.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        include: { _count: { select: { concepts: true, flashcards: true, quizzes: true } } },
+      }),
+      prisma.quizAttempt.findMany({
+        where: { userId },
+      }),
+      prisma.conceptMastery.findMany({
+        where: { userId },
+        include: { concept: true },
+        orderBy: { lastReviewedAt: 'desc' },
+      }),
+      prisma.revisionTask.findMany({
+        where: { userId, completed: false },
+        include: { concept: true },
+        orderBy: { scheduledFor: 'asc' },
+      }),
+    ]);
+
+    const formattedLectures = lectures.map((item) => ({
+      id: item.id,
+      user_id: item.userId,
+      youtube_url: item.youtubeUrl,
+      title: item.title,
+      transcript: item.transcript,
+      transcript_segments: item.transcriptSegments ? JSON.parse(item.transcriptSegments) : null,
+      duration: item.duration,
+      status: item.status,
+      error_message: item.errorMessage,
+      summary: item.summary ? JSON.parse(item.summary) : null,
+      created_at: item.createdAt.toISOString(),
+      updated_at: item.updatedAt.toISOString(),
+      _count: item._count,
+    }));
+
+    const quizzesAttempted = quizAttempts.length;
+    let averageScore = 0;
+    if (quizzesAttempted > 0) {
+      const totalScore = quizAttempts.reduce((sum, a) => sum + (a.score || 0), 0);
+      averageScore = Math.round(totalScore / quizzesAttempted);
+    }
+
+    const mastery = masteryList.map((m) => ({
+      id: m.id,
+      user_id: m.userId,
+      concept_id: m.conceptId,
+      concept_name: m.concept?.name || 'Concept',
+      lecture_id: m.concept?.lectureId || null,
+      mastery_score: m.masteryScore,
+      correct_count: m.correctCount,
+      incorrect_count: m.incorrectCount,
+      last_reviewed_at: m.lastReviewedAt.toISOString(),
+      next_review_at: m.nextReviewAt.toISOString(),
+    }));
+
+    const conceptsMastered = mastery.filter((m) => m.mastery_score >= 80).length;
+    const weakConcepts = mastery.filter((m) => m.mastery_score < 60);
+
+    const revisionTasks = revisionTaskList.map((t) => {
+      const matchingMastery = mastery.find((m) => m.concept_id === t.conceptId);
+      return {
+        id: t.id,
+        user_id: t.userId,
+        concept_id: t.conceptId,
+        concept_name: t.concept?.name || 'Concept',
+        lecture_id: t.concept?.lectureId || null,
+        task_type: t.taskType,
+        mastery_score: matchingMastery?.mastery_score ?? 0,
+        content: t.content ? JSON.parse(t.content) : null,
+        scheduled_for: t.scheduledFor.toISOString(),
+        completed: t.completed,
+        created_at: t.createdAt.toISOString(),
+      };
+    });
+
+    const upcomingReviews = [...mastery].sort(
+      (a, b) => new Date(a.next_review_at).getTime() - new Date(b.next_review_at).getTime()
+    );
+
+    return {
+      stats: {
+        totalLectures: formattedLectures.length,
+        quizzesAttempted,
+        averageScore,
+        conceptsMastered,
+      },
+      mastery,
+      weakConcepts,
+      revisionTasks,
+      upcomingReviews,
+      recentLectures: formattedLectures.slice(0, 5),
     };
   }
 }

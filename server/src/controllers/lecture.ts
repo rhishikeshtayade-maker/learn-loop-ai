@@ -52,7 +52,7 @@ export async function createLecture(req: AuthRequest, res: Response): Promise<vo
       },
     });
   } catch (error) {
-    console.error('Failed to create lecture:', error);
+    console.error('Failed to create lecture:', error instanceof Error ? error.stack || error.message : error);
     res.status(500).json({ error: 'Failed to create lecture record' });
   }
 }

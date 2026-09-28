@@ -141,3 +141,37 @@ export interface QuizResultResponse {
   success: boolean;
   result: QuizResultData;
 }
+
+export interface ConceptMastery {
+  id: string;
+  user_id?: string;
+  userId?: string;
+  concept_id?: string;
+  conceptId?: string;
+  mastery_score?: number;
+  masteryScore?: number;
+  correct_count?: number;
+  correctCount?: number;
+  incorrect_count?: number;
+  incorrectCount?: number;
+  last_reviewed_at?: string;
+  lastReviewedAt?: string;
+  next_review_at?: string;
+  nextReviewAt?: string;
+}
+
+export interface RevisionTask {
+  id: string;
+  user_id?: string;
+  userId?: string;
+  concept_id?: string;
+  conceptId?: string;
+  task_type?: string;
+  taskType?: string;
+  content?: any;
+  scheduled_for?: string;
+  scheduledFor?: string;
+  completed: boolean;
+  created_at?: string;
+  createdAt?: string;
+}

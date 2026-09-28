@@ -33,16 +33,30 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
 
     const sb = getSupabaseAdmin();
     if (sb) {
-      // 1. Authenticate with Supabase Auth
       const { data: { user: sbUser }, error } = await sb.auth.getUser(token);
       if (!error && sbUser) {
-        // Retrieve profile from database
         const profile = await db.getProfile(sbUser.id);
+        const userName = profile?.name || sbUser.user_metadata?.name || 'Student';
         req.user = {
           id: sbUser.id,
           email: sbUser.email || '',
-          name: profile?.name || sbUser.user_metadata?.name || 'Student',
+          name: userName,
         };
+
+        // Ensure user exists in Prisma for database fallback operations
+        await prisma.user.upsert({
+          where: { id: sbUser.id },
+          create: {
+            id: sbUser.id,
+            email: sbUser.email || `${sbUser.id}@placeholder.local`,
+            name: userName,
+            passwordHash: '',
+          },
+          update: {
+            name: userName,
+          },
+        }).catch(() => {});
+
         next();
         return;
       }
