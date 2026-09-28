@@ -5,6 +5,7 @@ import config from './config';
 import prisma from './prisma';
 import authRoutes from './routes/auth';
 import lectureRoutes from './routes/lecture';
+import quizAttemptRoutes from './routes/quizAttempt';
 import { requireAuth, AuthRequest } from './middleware/auth';
 
 const app = express();
@@ -57,6 +58,9 @@ app.use('/api/auth', authRoutes);
 
 // Lecture Routes
 app.use('/api/lectures', lectureRoutes);
+
+// Quiz Attempt Routes
+app.use('/api/quiz-attempts', quizAttemptRoutes);
 
 // Protected Test Route to verify authorization
 app.get('/api/protected/test', requireAuth, (req: AuthRequest, res: Response) => {

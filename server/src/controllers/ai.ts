@@ -221,3 +221,181 @@ export async function getLectureLearningContent(req: AuthRequest, res: Response)
     res.status(500).json({ error: 'Failed to retrieve learning content' });
   }
 }
+/**
+ * POST /api/lectures/:id/quiz/start
+ * Creates a new quiz attempt for the authenticated user.
+ */
+export async function startQuizAttempt(
+  req: AuthRequest,
+  res: Response
+): Promise<void> {
+  if (!req.user) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+
+  const { id } = req.params;
+
+  try {
+    // Verify lecture ownership
+    const lecture = await db.getLectureById(id, req.user.id);
+
+    if (!lecture) {
+      res.status(404).json({ error: 'Lecture not found' });
+      return;
+    }
+
+    // Get quiz
+    const quizRes = await db.getQuizByLecture(id);
+
+    if (!quizRes) {
+      res.status(404).json({ error: 'Quiz not found for this lecture' });
+      return;
+    }
+
+    if (!quizRes.questions.length) {
+      res.status(400).json({ error: 'Quiz has no questions' });
+      return;
+    }
+
+    // Create attempt
+    const attempt = await db.createQuizAttempt(
+      req.user.id,
+      quizRes.quiz.id
+    );
+
+    res.status(201).json({
+      success: true,
+      attempt: {
+        id: attempt.id,
+        quizId: attempt.quiz_id,
+        startedAt: attempt.started_at,
+      },
+    });
+  } catch (error: any) {
+    console.error('startQuizAttempt error:', error);
+
+    res.status(500).json({
+      error: error?.message || 'Failed to start quiz attempt',
+    });
+  }
+}
+
+/**
+ * POST /api/quiz-attempts/:attemptId/submit
+ * Grades and completes a quiz attempt.
+ */
+export async function submitQuizAttempt(
+  req: AuthRequest,
+  res: Response
+): Promise<void> {
+  if (!req.user) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+
+  const { attemptId } = req.params;
+
+  try {
+    const answers = req.body?.answers;
+
+    if (!Array.isArray(answers)) {
+      res.status(400).json({
+        error: 'answers must be an array',
+      });
+      return;
+    }
+
+    // Validate basic answer structure
+    for (const answer of answers) {
+      if (
+        !answer ||
+        typeof answer.questionId !== 'string' ||
+        !Number.isInteger(answer.selectedAnswer)
+      ) {
+        res.status(400).json({
+          error: 'Each answer must contain questionId and selectedAnswer',
+        });
+        return;
+      }
+    }
+
+    const result = await db.submitQuizAttempt(
+      attemptId,
+      req.user.id,
+      answers
+    );
+
+    res.json({
+      success: true,
+      result: {
+        attemptId: result.attempt.id,
+        quizId: result.attempt.quiz_id,
+        score: result.score,
+        correctAnswers: result.correctAnswers,
+        totalQuestions: result.totalQuestions,
+      },
+    });
+  } catch (error: any) {
+    console.error('submitQuizAttempt error:', error);
+
+    const message = error?.message || 'Failed to submit quiz';
+
+    if (
+      message === 'Quiz attempt not found' ||
+      message === 'Quiz attempt has already been submitted' ||
+      message === 'Invalid question submitted' ||
+      message === 'Invalid answer option submitted' ||
+      message === 'Duplicate question answer submitted' ||
+      message === 'Please answer all questions before submitting'
+    ) {
+      res.status(400).json({ error: message });
+      return;
+    }
+
+    res.status(500).json({
+      error: 'Failed to submit quiz',
+    });
+  }
+}
+
+/**
+ * GET /api/quiz-attempts/:attemptId/result
+ * Returns the authenticated user's quiz result.
+ */
+export async function getQuizAttemptResult(
+  req: AuthRequest,
+  res: Response
+): Promise<void> {
+  if (!req.user) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+
+  const { attemptId } = req.params;
+
+  try {
+    const result = await db.getQuizAttemptResult(
+      attemptId,
+      req.user.id
+    );
+
+    if (!result) {
+      res.status(404).json({
+        error: 'Quiz attempt not found or not completed yet',
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      result,
+    });
+  } catch (error: any) {
+    console.error('getQuizAttemptResult error:', error);
+
+    res.status(500).json({
+      error: 'Failed to retrieve quiz result',
+    });
+  }
+}

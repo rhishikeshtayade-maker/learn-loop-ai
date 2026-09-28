@@ -73,6 +73,23 @@ export interface QuizQuestionRecord {
   created_at?: string;
 }
 
+export interface QuizAttemptRecord {
+  id: string;
+  user_id: string;
+  quiz_id: string;
+  score: number;
+  started_at: string;
+  completed_at?: string | null;
+}
+
+export interface QuizAnswerRecord {
+  id: string;
+  attempt_id: string;
+  question_id: string;
+  selected_answer: number;
+  is_correct: boolean;
+}
+
 class SupabaseDatabaseService {
   /**
    * Helper to determine whether Supabase Cloud is active
@@ -713,6 +730,310 @@ class SupabaseDatabaseService {
         explanation: q.explanation,
         difficulty: q.difficulty,
       })),
+    };
+  }
+
+  // =========================================
+  // QUIZ ATTEMPTS & ANSWERS
+  // =========================================
+  async createQuizAttempt(userId: string, quizId: string): Promise<QuizAttemptRecord> {
+    const sb = getSupabaseAdmin();
+    if (sb) {
+      const { data, error } = await sb
+        .from('quiz_attempts')
+        .insert({
+          user_id: userId,
+          quiz_id: quizId,
+          score: 0,
+        })
+        .select('*')
+        .single();
+
+      if (error || !data) {
+        throw new Error(`Failed to create quiz attempt: ${error?.message}`);
+      }
+      return data;
+    }
+
+    // Prisma Fallback
+    const created = await prisma.quizAttempt.create({
+      data: {
+        userId,
+        quizId,
+        score: 0,
+      },
+    });
+
+    return {
+      id: created.id,
+      user_id: created.userId,
+      quiz_id: created.quizId,
+      score: created.score,
+      started_at: created.startedAt.toISOString(),
+      completed_at: created.completedAt ? created.completedAt.toISOString() : null,
+    };
+  }
+
+  async getQuizAttempt(attemptId: string, userId: string): Promise<QuizAttemptRecord | null> {
+    const sb = getSupabaseAdmin();
+    if (sb) {
+      const { data, error } = await sb
+        .from('quiz_attempts')
+        .select('*')
+        .eq('id', attemptId)
+        .eq('user_id', userId)
+        .single();
+
+      if (error || !data) return null;
+      return data;
+    }
+
+    // Prisma Fallback
+    const item = await prisma.quizAttempt.findFirst({
+      where: { id: attemptId, userId },
+    });
+
+    if (!item) return null;
+
+    return {
+      id: item.id,
+      user_id: item.userId,
+      quiz_id: item.quizId,
+      score: item.score,
+      started_at: item.startedAt.toISOString(),
+      completed_at: item.completedAt ? item.completedAt.toISOString() : null,
+    };
+  }
+
+  async submitQuizAttempt(
+    attemptId: string,
+    userId: string,
+    answers: Array<{ questionId: string; selectedAnswer: number }>
+  ): Promise<{ attempt: QuizAttemptRecord; score: number; correctAnswers: number; totalQuestions: number }> {
+    const sb = getSupabaseAdmin();
+
+    // 1. Verify ownership & attempt status
+    const attempt = await this.getQuizAttempt(attemptId, userId);
+    if (!attempt) {
+      throw new Error('Quiz attempt not found');
+    }
+
+    if (attempt.completed_at) {
+      throw new Error('Quiz attempt has already been submitted');
+    }
+
+    // 2. Load quiz questions from DB
+    let quizQuestions: QuizQuestionRecord[] = [];
+    if (sb) {
+      const { data, error } = await sb
+        .from('quiz_questions')
+        .select('*')
+        .eq('quiz_id', attempt.quiz_id);
+      if (error || !data || data.length === 0) {
+        throw new Error('Quiz questions not found');
+      }
+      quizQuestions = data;
+    } else {
+      const list = await prisma.quizQuestion.findMany({
+        where: { quizId: attempt.quiz_id },
+      });
+      if (!list || list.length === 0) {
+        throw new Error('Quiz questions not found');
+      }
+      quizQuestions = list.map((q) => ({
+        id: q.id,
+        quiz_id: q.quizId,
+        concept_id: q.conceptId,
+        question: q.question,
+        options: typeof q.options === 'string' ? JSON.parse(q.options) : q.options,
+        correct_answer: q.correctAnswer,
+        explanation: q.explanation,
+        difficulty: q.difficulty,
+      }));
+    }
+
+    const questionMap = new Map<string, QuizQuestionRecord>();
+    for (const q of quizQuestions) {
+      questionMap.set(q.id, q);
+    }
+
+    // 3. Validate duplicate answers
+    const seenQuestionIds = new Set<string>();
+    for (const ans of answers) {
+      if (seenQuestionIds.has(ans.questionId)) {
+        throw new Error('Duplicate question answer submitted');
+      }
+      seenQuestionIds.add(ans.questionId);
+    }
+
+    // 4. Validate all questions answered
+    if (answers.length !== quizQuestions.length || seenQuestionIds.size !== quizQuestions.length) {
+      throw new Error('Please answer all questions before submitting');
+    }
+
+    // 5. Validate question IDs and answer option indexes
+    let correctCount = 0;
+    const answerRecordsToInsert: Array<{
+      attempt_id: string;
+      question_id: string;
+      selected_answer: number;
+      is_correct: boolean;
+    }> = [];
+
+    for (const ans of answers) {
+      const qRecord = questionMap.get(ans.questionId);
+      if (!qRecord) {
+        throw new Error('Invalid question submitted');
+      }
+
+      if (
+        !Number.isInteger(ans.selectedAnswer) ||
+        ans.selectedAnswer < 0 ||
+        ans.selectedAnswer >= qRecord.options.length
+      ) {
+        throw new Error('Invalid answer option submitted');
+      }
+
+      const isCorrect = ans.selectedAnswer === qRecord.correct_answer;
+      if (isCorrect) correctCount++;
+
+      answerRecordsToInsert.push({
+        attempt_id: attemptId,
+        question_id: ans.questionId,
+        selected_answer: ans.selectedAnswer,
+        is_correct: isCorrect,
+      });
+    }
+
+    const totalQuestions = quizQuestions.length;
+    const percentageScore = Math.round((correctCount / totalQuestions) * 100);
+    const completedAtIso = new Date().toISOString();
+
+    // 6. Save quiz_answers & update quiz_attempts
+    if (sb) {
+      const { error: ansErr } = await sb.from('quiz_answers').insert(answerRecordsToInsert);
+      if (ansErr) {
+        throw new Error(`Failed to save quiz answers: ${ansErr.message}`);
+      }
+
+      const { data: updatedAttempt, error: attErr } = await sb
+        .from('quiz_attempts')
+        .update({
+          score: percentageScore,
+          completed_at: completedAtIso,
+        })
+        .eq('id', attemptId)
+        .select('*')
+        .single();
+
+      if (attErr || !updatedAttempt) {
+        throw new Error(`Failed to update quiz attempt: ${attErr?.message}`);
+      }
+
+      return {
+        attempt: updatedAttempt,
+        score: percentageScore,
+        correctAnswers: correctCount,
+        totalQuestions,
+      };
+    }
+
+    // Prisma Fallback
+    await Promise.all(
+      answerRecordsToInsert.map((ans) =>
+        prisma.quizAnswer.create({
+          data: {
+            attemptId: ans.attempt_id,
+            questionId: ans.question_id,
+            selectedAnswer: ans.selected_answer,
+            isCorrect: ans.is_correct,
+          },
+        })
+      )
+    );
+
+    const updatedAttempt = await prisma.quizAttempt.update({
+      where: { id: attemptId },
+      data: {
+        score: percentageScore,
+        completedAt: new Date(completedAtIso),
+      },
+    });
+
+    return {
+      attempt: {
+        id: updatedAttempt.id,
+        user_id: updatedAttempt.userId,
+        quiz_id: updatedAttempt.quizId,
+        score: updatedAttempt.score,
+        started_at: updatedAttempt.startedAt.toISOString(),
+        completed_at: updatedAttempt.completedAt ? updatedAttempt.completedAt.toISOString() : null,
+      },
+      score: percentageScore,
+      correctAnswers: correctCount,
+      totalQuestions,
+    };
+  }
+
+  async getQuizAttemptResult(
+    attemptId: string,
+    userId: string
+  ): Promise<{
+    attemptId: string;
+    quizId: string;
+    lectureId: string;
+    score: number;
+    correctAnswers: number;
+    totalQuestions: number;
+    startedAt: string;
+    completedAt: string | null;
+  } | null> {
+    const sb = getSupabaseAdmin();
+    const attempt = await this.getQuizAttempt(attemptId, userId);
+    if (!attempt || !attempt.completed_at) return null;
+
+    if (sb) {
+      const [answersRes, quizRes] = await Promise.all([
+        sb.from('quiz_answers').select('is_correct').eq('attempt_id', attemptId),
+        sb.from('quizzes').select('lecture_id').eq('id', attempt.quiz_id).single(),
+      ]);
+
+      const answers = answersRes.data || [];
+      const totalQuestions = answers.length;
+      const correctAnswers = answers.filter((a) => a.is_correct).length;
+      const lectureId = quizRes.data?.lecture_id || '';
+
+      return {
+        attemptId: attempt.id,
+        quizId: attempt.quiz_id,
+        lectureId,
+        score: attempt.score,
+        correctAnswers,
+        totalQuestions,
+        startedAt: attempt.started_at,
+        completedAt: attempt.completed_at,
+      };
+    }
+
+    // Prisma Fallback
+    const [answers, quiz] = await Promise.all([
+      prisma.quizAnswer.findMany({ where: { attemptId } }),
+      prisma.quiz.findUnique({ where: { id: attempt.quiz_id } }),
+    ]);
+
+    const totalQuestions = answers.length;
+    const correctAnswers = answers.filter((a) => a.isCorrect).length;
+    const lectureId = quiz?.lectureId || '';
+
+    return {
+      attemptId: attempt.id,
+      quizId: attempt.quiz_id,
+      lectureId,
+      score: attempt.score,
+      correctAnswers,
+      totalQuestions,
+      startedAt: attempt.started_at,
+      completedAt: attempt.completed_at,
     };
   }
 }

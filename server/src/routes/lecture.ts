@@ -14,6 +14,7 @@ import {
   getLectureFlashcards,
   getLectureQuiz,
   getLectureLearningContent,
+  startQuizAttempt,
 } from '../controllers/ai';
 
 const router = Router();
@@ -28,8 +29,10 @@ router.delete('/:id', requireAuth, deleteLecture);
 router.post('/:id/ai-process', requireAuth, processLectureAI);
 router.get('/:id/concepts', requireAuth, getLectureConcepts);
 router.get('/:id/summary', requireAuth, getLectureSummary);
-router.get('/:id/flashcards', requireAuth, getLectureFlashcards);
 router.get('/:id/quiz', requireAuth, getLectureQuiz);
 router.get('/:id/learning-content', requireAuth, getLectureLearningContent);
+
+// Phase 5 Quiz System
+router.post('/:id/quiz/start', requireAuth, startQuizAttempt);
 
 export default router;

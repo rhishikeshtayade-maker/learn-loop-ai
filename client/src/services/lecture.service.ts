@@ -77,4 +77,47 @@ export const lectureService = {
       questions: res.questions,
     };
   },
+
+  // Phase 5 Quiz System Methods
+  async startQuizAttempt(lectureId: string) {
+    return apiRequest<{ success: boolean; attempt: { id: string; quizId: string; startedAt: string } }>(
+      `/api/lectures/${lectureId}/quiz/start`,
+      { method: 'POST' }
+    );
+  },
+
+  async submitQuizAttempt(
+    attemptId: string,
+    answers: Array<{ questionId: string; selectedAnswer: number }>
+  ) {
+    return apiRequest<{
+      success: boolean;
+      result: {
+        attemptId: string;
+        quizId: string;
+        score: number;
+        correctAnswers: number;
+        totalQuestions: number;
+      };
+    }>(`/api/quiz-attempts/${attemptId}/submit`, {
+      method: 'POST',
+      body: JSON.stringify({ answers }),
+    });
+  },
+
+  async getQuizAttemptResult(attemptId: string) {
+    return apiRequest<{
+      success: boolean;
+      result: {
+        attemptId: string;
+        quizId: string;
+        lectureId: string;
+        score: number;
+        correctAnswers: number;
+        totalQuestions: number;
+        startedAt: string;
+        completedAt: string;
+      };
+    }>(`/api/quiz-attempts/${attemptId}/result`);
+  },
 };

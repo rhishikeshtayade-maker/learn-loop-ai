@@ -96,3 +96,48 @@ export interface LearningContentResponse {
   flashcards: Flashcard[];
   quiz: QuizData | null;
 }
+
+export interface QuizAttempt {
+  id: string;
+  quizId: string;
+  startedAt: string;
+  completedAt?: string | null;
+  score?: number;
+}
+
+export interface StartQuizResponse {
+  success: boolean;
+  attempt: QuizAttempt;
+}
+
+export interface QuizAnswerPayload {
+  questionId: string;
+  selectedAnswer: number;
+}
+
+export interface SubmitQuizResponse {
+  success: boolean;
+  result: {
+    attemptId: string;
+    quizId: string;
+    score: number;
+    correctAnswers: number;
+    totalQuestions: number;
+  };
+}
+
+export interface QuizResultData {
+  attemptId: string;
+  quizId: string;
+  lectureId: string;
+  score: number;
+  correctAnswers: number;
+  totalQuestions: number;
+  startedAt: string;
+  completedAt: string;
+}
+
+export interface QuizResultResponse {
+  success: boolean;
+  result: QuizResultData;
+}

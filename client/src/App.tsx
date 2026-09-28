@@ -8,6 +8,7 @@ import { Dashboard } from './pages/Dashboard';
 import { LectureList } from './pages/LectureList';
 import { NewLecture } from './pages/NewLecture';
 import { LectureDetail } from './pages/LectureDetail';
+import { QuizResult } from './pages/QuizResult';
 
 export function App() {
   return (
@@ -49,6 +50,14 @@ export function App() {
             element={
               <ProtectedRoute>
                 <LectureDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/quiz-attempts/:attemptId/result"
+            element={
+              <ProtectedRoute>
+                <QuizResult />
               </ProtectedRoute>
             }
           />

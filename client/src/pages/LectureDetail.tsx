@@ -442,7 +442,7 @@ export const LectureDetail: React.FC = () => {
         {activeTab === 'concepts' && <ConceptsTab concepts={concepts} />}
         {activeTab === 'summary' && <SummaryTab summary={summary} />}
         {activeTab === 'flashcards' && <FlashcardsTab flashcards={flashcards} />}
-        {activeTab === 'quiz' && <QuizTab questions={quizQuestions} />}
+        {activeTab === 'quiz' && <QuizTab questions={quizQuestions} lectureId={id} />}
         {activeTab === 'transcript' && (
           <TranscriptViewer
             transcript={lecture?.transcript || ''}
