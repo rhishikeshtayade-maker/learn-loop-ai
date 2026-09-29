@@ -29,6 +29,7 @@ router.delete('/:id', requireAuth, deleteLecture);
 router.post('/:id/ai-process', requireAuth, processLectureAI);
 router.get('/:id/concepts', requireAuth, getLectureConcepts);
 router.get('/:id/summary', requireAuth, getLectureSummary);
+router.get('/:id/flashcards', requireAuth, getLectureFlashcards);
 router.get('/:id/quiz', requireAuth, getLectureQuiz);
 router.get('/:id/learning-content', requireAuth, getLectureLearningContent);
 

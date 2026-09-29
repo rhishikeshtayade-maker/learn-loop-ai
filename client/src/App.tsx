@@ -9,6 +9,8 @@ import { LectureList } from './pages/LectureList';
 import { NewLecture } from './pages/NewLecture';
 import { LectureDetail } from './pages/LectureDetail';
 import { QuizResult } from './pages/QuizResult';
+import { Revision } from './pages/Revision';
+import { Profile } from './pages/Profile';
 
 export function App() {
   return (
@@ -58,6 +60,22 @@ export function App() {
             element={
               <ProtectedRoute>
                 <QuizResult />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/revision"
+            element={
+              <ProtectedRoute>
+                <Revision />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <Profile />
               </ProtectedRoute>
             }
           />

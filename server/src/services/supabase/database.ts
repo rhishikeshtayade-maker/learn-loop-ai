@@ -50,6 +50,10 @@ export interface FlashcardRecord {
   concept_id?: string | null;
   question: string;
   answer: string;
+  options?: string[] | null;
+  correct_answer?: number | null;
+  correctAnswer?: number | null;
+  explanation?: string | null;
   difficulty: string;
   created_at?: string;
 }
@@ -422,21 +426,24 @@ class SupabaseDatabaseService {
   }>): Promise<ConceptRecord[]> {
     const sb = getSupabaseAdmin();
     if (sb) {
-      // Delete existing concepts for idempotency
-      await sb.from('concepts').delete().eq('lecture_id', lectureId);
+      try {
+        await sb.from('concepts').delete().eq('lecture_id', lectureId);
 
-      const rows = concepts.map((c) => ({
-        lecture_id: lectureId,
-        name: c.name,
-        description: c.description,
-        importance: c.importance || 'MEDIUM',
-        timestamp_start: c.timestampStart ?? null,
-        timestamp_end: c.timestampEnd ?? null,
-      }));
+        const rows = concepts.map((c) => ({
+          lecture_id: lectureId,
+          name: c.name,
+          description: c.description,
+          importance: c.importance || 'MEDIUM',
+          timestamp_start: c.timestampStart ?? null,
+          timestamp_end: c.timestampEnd ?? null,
+        }));
 
-      const { data, error } = await sb.from('concepts').insert(rows).select('*');
-      if (error || !data) throw new Error(`Failed to save concepts: ${error?.message}`);
-      return data;
+        const { data, error } = await sb.from('concepts').insert(rows).select('*');
+        if (!error && data) return data;
+        console.warn(`Supabase saveConcepts failed (${error?.message}). Falling back to Prisma...`);
+      } catch (err) {
+        console.warn('Supabase saveConcepts exception, falling back to Prisma:', err);
+      }
     }
 
     // Prisma Fallback
@@ -486,19 +493,32 @@ class SupabaseDatabaseService {
       if (!target) continue;
 
       if (sb) {
-        await sb
-          .from('concepts')
-          .update({
-            simple_explanation: exp.simpleExplanation,
-            detailed_explanation: exp.detailedExplanation,
-            example: exp.example,
-            common_misconception: exp.commonMisconception,
-            key_takeaway: exp.keyTakeaway,
-          })
-          .eq('id', target.id);
-      } else {
-        // In Prisma, store extra fields or update if schema matches
-        // (explanations stored in database records)
+        try {
+          const { error } = await sb
+            .from('concepts')
+            .update({
+              simple_explanation: exp.simpleExplanation,
+              detailed_explanation: exp.detailedExplanation,
+              example: exp.example,
+              common_misconception: exp.commonMisconception,
+              key_takeaway: exp.keyTakeaway,
+            })
+            .eq('id', target.id);
+          if (!error) continue;
+        } catch {
+          // Fall through to Prisma
+        }
+      }
+
+      try {
+        await prisma.concept.update({
+          where: { id: target.id },
+          data: {
+            description: exp.detailedExplanation || exp.simpleExplanation || target.description,
+          },
+        });
+      } catch {
+        // Ignore if concept is not stored in Prisma
       }
     }
   }
@@ -506,13 +526,16 @@ class SupabaseDatabaseService {
   async getConceptsByLecture(lectureId: string): Promise<ConceptRecord[]> {
     const sb = getSupabaseAdmin();
     if (sb) {
-      const { data, error } = await sb
-        .from('concepts')
-        .select('*')
-        .eq('lecture_id', lectureId)
-        .order('created_at', { ascending: true });
-      if (error) return [];
-      return data || [];
+      try {
+        const { data, error } = await sb
+          .from('concepts')
+          .select('*')
+          .eq('lecture_id', lectureId)
+          .order('created_at', { ascending: true });
+        if (!error && data) return data;
+      } catch {
+        // Fallback to Prisma
+      }
     }
 
     // Prisma Fallback
@@ -538,14 +561,19 @@ class SupabaseDatabaseService {
   async saveSummary(lectureId: string, summaryObj: any): Promise<void> {
     const sb = getSupabaseAdmin();
     if (sb) {
-      await sb
-        .from('lectures')
-        .update({
-          summary: summaryObj,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', lectureId);
-      return;
+      try {
+        const { error } = await sb
+          .from('lectures')
+          .update({
+            summary: summaryObj,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', lectureId);
+        if (!error) return;
+        console.warn(`Supabase saveSummary failed (${error?.message}). Falling back to Prisma...`);
+      } catch (err) {
+        console.warn('Supabase saveSummary exception, falling back to Prisma:', err);
+      }
     }
 
     // Prisma Fallback
@@ -560,9 +588,79 @@ class SupabaseDatabaseService {
   // =========================================
   // FLASHCARDS
   // =========================================
+  // FLASHCARDS
+  // =========================================
+  private mapFlashcardRecord(raw: any): FlashcardRecord {
+    let options: string[] | null = null;
+    let correctAnswer: number | null = null;
+    let explanation: string | null = null;
+    let answerText: string = raw.answer || '';
+
+    if (raw.options) {
+      if (Array.isArray(raw.options)) {
+        options = raw.options;
+      } else if (typeof raw.options === 'string') {
+        try {
+          options = JSON.parse(raw.options);
+        } catch {
+          options = null;
+        }
+      }
+    }
+
+    if (raw.correct_answer !== undefined && raw.correct_answer !== null) {
+      correctAnswer = typeof raw.correct_answer === 'number' ? raw.correct_answer : parseInt(String(raw.correct_answer), 10);
+    } else if (raw.correctAnswer !== undefined && raw.correctAnswer !== null) {
+      correctAnswer = typeof raw.correctAnswer === 'number' ? raw.correctAnswer : parseInt(String(raw.correctAnswer), 10);
+    }
+
+    if (raw.explanation) {
+      explanation = raw.explanation;
+    }
+
+    // Fallback: Check if answerText itself was stored as JSON string in legacy schema
+    if ((!options || options.length !== 4) && typeof answerText === 'string' && answerText.trim().startsWith('{')) {
+      try {
+        const json = JSON.parse(answerText);
+        if (json && Array.isArray(json.options) && typeof json.correctAnswer === 'number') {
+          options = json.options;
+          correctAnswer = json.correctAnswer;
+          explanation = json.explanation || null;
+          answerText = json.text || json.options[json.correctAnswer] || answerText;
+        }
+      } catch {
+        // Ignore JSON parse error, treat as text answer
+      }
+    }
+
+    // Ensure raw carries parsed fields for downstream usage
+    raw.options = options;
+    raw.correct_answer = correctAnswer;
+    raw.correctAnswer = correctAnswer;
+    raw.explanation = explanation;
+
+    return {
+      id: raw.id,
+      lecture_id: raw.lecture_id || raw.lectureId || '',
+      concept_id: raw.concept_id || raw.conceptId,
+      question: raw.question,
+      answer: answerText,
+      options: options && options.length === 4 ? options : null,
+      correct_answer: correctAnswer,
+      correctAnswer: correctAnswer,
+      explanation,
+      difficulty: raw.difficulty || 'MEDIUM',
+      created_at: raw.created_at || raw.createdAt,
+    };
+  }
+
   async saveFlashcards(lectureId: string, flashcards: Array<{
     question: string;
-    answer: string;
+    answer?: string;
+    options?: string[] | null;
+    correctAnswer?: number | null;
+    correct_answer?: number | null;
+    explanation?: string | null;
     conceptId?: string | null;
     conceptName?: string;
     difficulty: string;
@@ -577,70 +675,82 @@ class SupabaseDatabaseService {
         );
         if (found) resolvedConceptId = found.id;
       }
+
+      const optionsArr = Array.isArray(f.options) && f.options.length === 4 ? f.options : null;
+      const cAns = typeof f.correctAnswer === 'number'
+        ? f.correctAnswer
+        : (typeof f.correct_answer === 'number' ? f.correct_answer : null);
+      const textAnswer = f.answer || (optionsArr && cAns !== null ? optionsArr[cAns] : '');
+
       return {
         lecture_id: lectureId,
         concept_id: resolvedConceptId,
         question: f.question,
-        answer: f.answer,
+        answer: textAnswer,
+        options: optionsArr,
+        correct_answer: cAns,
+        explanation: f.explanation || null,
         difficulty: f.difficulty || 'MEDIUM',
       };
     });
 
     if (sb) {
-      await sb.from('flashcards').delete().eq('lecture_id', lectureId);
-      const { data, error } = await sb.from('flashcards').insert(prepared).select('*');
-      if (error || !data) throw new Error(`Failed to save flashcards: ${error?.message}`);
-      return data;
+      try {
+        await sb.from('flashcards').delete().eq('lecture_id', lectureId);
+        const { data, error } = await sb.from('flashcards').insert(prepared).select('*');
+        if (!error && data) return data.map((row) => this.mapFlashcardRecord(row));
+        console.warn(`Supabase saveFlashcards failed (${error?.message}). Falling back to Prisma...`);
+      } catch (err) {
+        console.warn('Supabase saveFlashcards exception, falling back to Prisma:', err);
+      }
     }
 
     // Prisma Fallback
     await prisma.flashcard.deleteMany({ where: { lectureId } });
     const created = await Promise.all(
-      prepared.map((f) =>
-        prisma.flashcard.create({
+      prepared.map((f) => {
+        let dbAnswer = f.answer;
+        if (f.options && Array.isArray(f.options)) {
+          dbAnswer = JSON.stringify({
+            text: f.answer,
+            options: f.options,
+            correctAnswer: f.correct_answer,
+            explanation: f.explanation || '',
+          });
+        }
+        return prisma.flashcard.create({
           data: {
             lectureId: f.lecture_id,
             conceptId: f.concept_id,
             question: f.question,
-            answer: f.answer,
+            answer: dbAnswer,
             difficulty: f.difficulty,
           },
-        })
-      )
+        });
+      })
     );
 
-    return created.map((f) => ({
-      id: f.id,
-      lecture_id: f.lectureId,
-      concept_id: f.conceptId,
-      question: f.question,
-      answer: f.answer,
-      difficulty: f.difficulty,
-    }));
+    return created.map((f) => this.mapFlashcardRecord(f));
   }
 
   async getFlashcardsByLecture(lectureId: string): Promise<FlashcardRecord[]> {
     const sb = getSupabaseAdmin();
     if (sb) {
-      const { data, error } = await sb
-        .from('flashcards')
-        .select('*')
-        .eq('lecture_id', lectureId)
-        .order('created_at', { ascending: true });
-      if (error) return [];
-      return data || [];
+      try {
+        const { data, error } = await sb
+          .from('flashcards')
+          .select('*')
+          .eq('lecture_id', lectureId)
+          .order('created_at', { ascending: true });
+        if (!error && data) return data.map((row) => this.mapFlashcardRecord(row));
+      } catch {
+        // Fallback to Prisma
+      }
     }
 
     // Prisma Fallback
     const list = await prisma.flashcard.findMany({ where: { lectureId } });
-    return list.map((f) => ({
-      id: f.id,
-      lecture_id: f.lectureId,
-      concept_id: f.conceptId,
-      question: f.question,
-      answer: f.answer,
-      difficulty: f.difficulty,
-    }));
+    return list.map((f) => this.mapFlashcardRecord(f));
   }
 
   // =========================================
@@ -658,44 +768,49 @@ class SupabaseDatabaseService {
     const sb = getSupabaseAdmin();
 
     if (sb) {
-      // Delete old quiz for this lecture if any
-      await sb.from('quizzes').delete().eq('lecture_id', lectureId);
+      try {
+        // Delete old quiz for this lecture if any
+        await sb.from('quizzes').delete().eq('lecture_id', lectureId);
 
-      const { data: newQuiz, error: qErr } = await sb
-        .from('quizzes')
-        .insert({ lecture_id: lectureId, title: quizTitle })
-        .select('*')
-        .single();
+        const { data: newQuiz, error: qErr } = await sb
+          .from('quizzes')
+          .insert({ lecture_id: lectureId, title: quizTitle })
+          .select('*')
+          .single();
 
-      if (qErr || !newQuiz) throw new Error(`Failed to create quiz: ${qErr?.message}`);
+        if (!qErr && newQuiz) {
+          const qRows = questions.map((q) => {
+            let resolvedConceptId = q.conceptId || null;
+            if (!resolvedConceptId && q.conceptName) {
+              const found = savedConcepts.find(
+                (c) => c.name.toLowerCase().trim() === q.conceptName?.toLowerCase().trim()
+              );
+              if (found) resolvedConceptId = found.id;
+            }
+            return {
+              quiz_id: newQuiz.id,
+              concept_id: resolvedConceptId,
+              question: q.question,
+              options: q.options,
+              correct_answer: q.correctAnswer,
+              explanation: q.explanation,
+              difficulty: q.difficulty || 'MEDIUM',
+            };
+          });
 
-      const qRows = questions.map((q) => {
-        let resolvedConceptId = q.conceptId || null;
-        if (!resolvedConceptId && q.conceptName) {
-          const found = savedConcepts.find(
-            (c) => c.name.toLowerCase().trim() === q.conceptName?.toLowerCase().trim()
-          );
-          if (found) resolvedConceptId = found.id;
+          const { data: savedQuestions, error: qqErr } = await sb
+            .from('quiz_questions')
+            .insert(qRows)
+            .select('*');
+
+          if (!qqErr && savedQuestions) {
+            return { quiz: newQuiz, questions: savedQuestions };
+          }
         }
-        return {
-          quiz_id: newQuiz.id,
-          concept_id: resolvedConceptId,
-          question: q.question,
-          options: q.options,
-          correct_answer: q.correctAnswer,
-          explanation: q.explanation,
-          difficulty: q.difficulty || 'MEDIUM',
-        };
-      });
-
-      const { data: savedQuestions, error: qqErr } = await sb
-        .from('quiz_questions')
-        .insert(qRows)
-        .select('*');
-
-      if (qqErr || !savedQuestions) throw new Error(`Failed to save quiz questions: ${qqErr?.message}`);
-
-      return { quiz: newQuiz, questions: savedQuestions };
+        console.warn(`Supabase saveQuiz failed. Falling back to Prisma...`);
+      } catch (err) {
+        console.warn('Supabase saveQuiz exception, falling back to Prisma:', err);
+      }
     }
 
     // Prisma Fallback
@@ -749,23 +864,27 @@ class SupabaseDatabaseService {
   async getQuizByLecture(lectureId: string): Promise<{ quiz: QuizRecord; questions: QuizQuestionRecord[] } | null> {
     const sb = getSupabaseAdmin();
     if (sb) {
-      const { data: quiz, error: qErr } = await sb
-        .from('quizzes')
-        .select('*')
-        .eq('lecture_id', lectureId)
-        .single();
+      try {
+        const { data: quiz, error: qErr } = await sb
+          .from('quizzes')
+          .select('*')
+          .eq('lecture_id', lectureId)
+          .single();
 
-      if (qErr || !quiz) return null;
+        if (!qErr && quiz) {
+          const { data: questions, error: qqErr } = await sb
+            .from('quiz_questions')
+            .select('*')
+            .eq('quiz_id', quiz.id)
+            .order('created_at', { ascending: true });
 
-      const { data: questions, error: qqErr } = await sb
-        .from('quiz_questions')
-        .select('*')
-        .eq('quiz_id', quiz.id)
-        .order('created_at', { ascending: true });
-
-      if (qqErr) return null;
-
-      return { quiz, questions: questions || [] };
+          if (!qqErr && questions) {
+            return { quiz, questions };
+          }
+        }
+      } catch {
+        // Fallback to Prisma
+      }
     }
 
     // Prisma Fallback

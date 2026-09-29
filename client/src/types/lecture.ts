@@ -36,9 +36,15 @@ export interface SummaryData {
 export interface Flashcard {
   id: string;
   lecture_id?: string;
+  lectureId?: string;
   concept_id?: string | null;
+  conceptId?: string | null;
   question: string;
   answer: string;
+  options?: string[] | null;
+  correct_answer?: number | null;
+  correctAnswer?: number | null;
+  explanation?: string | null;
   difficulty: 'EASY' | 'MEDIUM' | 'HARD';
 }
 

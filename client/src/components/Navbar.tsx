@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Sparkles, LayoutDashboard, BookOpen, PlusCircle, LogOut } from 'lucide-react';
+import { Sparkles, LayoutDashboard, BookOpen, PlusCircle, LogOut, Repeat, User } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
@@ -10,7 +10,9 @@ export const Navbar: React.FC = () => {
   const isActive = (path: string) => {
     if (path === '/dashboard' && location.pathname === '/dashboard') return true;
     if (path === '/lectures' && location.pathname === '/lectures') return true;
+    if (path === '/revision' && location.pathname === '/revision') return true;
     if (path === '/lecture/new' && location.pathname === '/lecture/new') return true;
+    if (path === '/profile' && location.pathname === '/profile') return true;
     return false;
   };
 
@@ -55,6 +57,18 @@ export const Navbar: React.FC = () => {
             </Link>
 
             <Link
+              to="/revision"
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${
+                isActive('/revision')
+                  ? 'bg-slate-800 text-indigo-300 border border-slate-700'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+            >
+              <Repeat className="w-3.5 h-3.5 text-amber-400" />
+              Revision
+            </Link>
+
+            <Link
               to="/lecture/new"
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${
                 isActive('/lecture/new')
@@ -71,17 +85,18 @@ export const Navbar: React.FC = () => {
         {/* User Profile & Logout */}
         <div className="flex items-center gap-3">
           <Link
-            to="/lecture/new"
-            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow-sm transition"
+            to="/profile"
+            className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border transition ${
+              isActive('/profile')
+                ? 'bg-slate-800 border-indigo-500/40 text-indigo-300'
+                : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:bg-slate-800'
+            }`}
           >
-            <PlusCircle className="w-3.5 h-3.5" />
-            <span>Process URL</span>
+            <User className="w-3.5 h-3.5 text-indigo-400" />
+            <div className="flex flex-col text-left">
+              <span className="text-xs font-semibold leading-none">{user?.name}</span>
+            </div>
           </Link>
-
-          <div className="hidden sm:flex flex-col text-right">
-            <span className="text-xs font-semibold text-slate-200">{user?.name}</span>
-            <span className="text-[10px] text-slate-400 truncate max-w-[140px]">{user?.email}</span>
-          </div>
 
           <button
             onClick={logout}

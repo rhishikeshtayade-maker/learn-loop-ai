@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import config from '../../config';
 import { getConceptPrompt } from './prompts/conceptPrompt';
 import { getSummaryPrompt } from './prompts/summaryPrompt';
@@ -21,20 +21,49 @@ export class GeminiError extends Error {
 }
 
 export class GeminiService {
-  private getModel() {
+  /**
+   * Safe generation method using @google/genai with automatic model fallbacks
+   */
+  private async generateContentWithFallback(prompt: string): Promise<string> {
     const apiKey = config.geminiApiKey;
     if (!apiKey) {
       throw new GeminiError('GEMINI_API_KEY environment variable is not configured.');
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    return genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      generationConfig: {
-        responseMimeType: 'application/json',
-        temperature: 0.2,
-      },
-    });
+    const ai = new GoogleGenAI({ apiKey });
+    const candidateModels = ['gemini-3.7-flash', 'gemini-3.8-flash', 'gemini-3.5-flash-lite'];
+    let lastError: any = null;
+
+    for (const model of candidateModels) {
+      try {
+        console.log(`[Gemini Request] Sending request to model=${model} (prompt length=${prompt.length} chars)`);
+        const response = await ai.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            temperature: 0.2,
+          },
+        });
+
+        const responseText = response.text || '';
+        console.log(`[Gemini Response] Received from model=${model} (response length=${responseText.length} chars)`);
+        if (responseText.trim().length > 0) {
+          return responseText;
+        }
+      } catch (err: any) {
+        lastError = err;
+        const errName = err?.name || 'Error';
+        const errCode = err?.status || err?.code || 'UNKNOWN';
+        const errMsg = err?.message || String(err);
+        console.error(`[Gemini Error] Model ${model} failed (${errName}, code=${errCode}): ${errMsg}`);
+      }
+    }
+
+    throw new GeminiError(
+      `Gemini AI generation failed across all fallback models: ${lastError?.message || 'Unknown error'}`,
+      lastError
+    );
   }
 
   /**
@@ -48,6 +77,7 @@ export class GeminiService {
       }
       return JSON.parse(cleaned) as T;
     } catch (err: any) {
+      console.error('[Gemini JSON Parse Error] Raw text preview:', rawText.slice(0, 200));
       throw new GeminiError(`Failed to parse structured JSON from Gemini response: ${err.message}`, err);
     }
   }
@@ -56,18 +86,15 @@ export class GeminiService {
    * 1. Extract Concepts
    */
   async extractConcepts(transcript: string) {
-    const model = this.getModel();
     const prompt = getConceptPrompt(transcript);
-
     try {
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
+      const text = await this.generateContentWithFallback(prompt);
       const rawJson = this.parseJSON<unknown>(text);
       const validated = ConceptsArraySchema.parse(rawJson);
       return validated;
     } catch (err: any) {
       console.error('Gemini extractConcepts error:', err?.message || err);
-      throw new GeminiError(`Concept extraction failed: ${err.message}`, err);
+      throw err instanceof GeminiError ? err : new GeminiError(`Concept extraction failed: ${err.message}`, err);
     }
   }
 
@@ -75,18 +102,15 @@ export class GeminiService {
    * 2. Generate Summary
    */
   async generateSummary(transcript: string) {
-    const model = this.getModel();
     const prompt = getSummaryPrompt(transcript);
-
     try {
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
+      const text = await this.generateContentWithFallback(prompt);
       const rawJson = this.parseJSON<unknown>(text);
       const validated = SummarySchema.parse(rawJson);
       return validated;
     } catch (err: any) {
       console.error('Gemini generateSummary error:', err?.message || err);
-      throw new GeminiError(`Summary generation failed: ${err.message}`, err);
+      throw err instanceof GeminiError ? err : new GeminiError(`Summary generation failed: ${err.message}`, err);
     }
   }
 
@@ -94,18 +118,15 @@ export class GeminiService {
    * 3. Generate Concept Explanations
    */
   async generateConceptExplanations(transcript: string, concepts: Array<{ name: string; description: string }>) {
-    const model = this.getModel();
     const prompt = getExplanationPrompt(transcript, concepts);
-
     try {
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
+      const text = await this.generateContentWithFallback(prompt);
       const rawJson = this.parseJSON<unknown>(text);
       const validated = ConceptExplanationsArraySchema.parse(rawJson);
       return validated;
     } catch (err: any) {
       console.error('Gemini generateConceptExplanations error:', err?.message || err);
-      throw new GeminiError(`Concept explanation generation failed: ${err.message}`, err);
+      throw err instanceof GeminiError ? err : new GeminiError(`Concept explanation generation failed: ${err.message}`, err);
     }
   }
 
@@ -113,18 +134,15 @@ export class GeminiService {
    * 4. Generate Flashcards
    */
   async generateFlashcards(transcript: string, concepts: Array<{ name: string }>) {
-    const model = this.getModel();
     const prompt = getFlashcardPrompt(transcript, concepts);
-
     try {
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
+      const text = await this.generateContentWithFallback(prompt);
       const rawJson = this.parseJSON<unknown>(text);
       const validated = FlashcardsArraySchema.parse(rawJson);
       return validated;
     } catch (err: any) {
       console.error('Gemini generateFlashcards error:', err?.message || err);
-      throw new GeminiError(`Flashcard generation failed: ${err.message}`, err);
+      throw err instanceof GeminiError ? err : new GeminiError(`Flashcard generation failed: ${err.message}`, err);
     }
   }
 
@@ -132,18 +150,15 @@ export class GeminiService {
    * 5. Generate Quiz
    */
   async generateQuiz(transcript: string, concepts: Array<{ name: string }>) {
-    const model = this.getModel();
     const prompt = getQuizPrompt(transcript, concepts);
-
     try {
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
+      const text = await this.generateContentWithFallback(prompt);
       const rawJson = this.parseJSON<unknown>(text);
       const validated = QuizQuestionsArraySchema.parse(rawJson);
       return validated;
     } catch (err: any) {
       console.error('Gemini generateQuiz error:', err?.message || err);
-      throw new GeminiError(`Quiz generation failed: ${err.message}`, err);
+      throw err instanceof GeminiError ? err : new GeminiError(`Quiz generation failed: ${err.message}`, err);
     }
   }
 }

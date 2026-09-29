@@ -51,13 +51,15 @@ export const LectureDetail: React.FC = () => {
       setSummary(data.lecture.summary || null);
       setFlashcards(data.flashcards || []);
       setQuizQuestions(data.quiz?.questions || []);
-    } catch {
+      setError(null);
+    } catch (err) {
       // Fallback single fetch
       try {
         const l = await lectureService.getLectureById(id);
         setLecture(l);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load lecture details');
+        setError('Failed to generate learning materials.');
+      } catch (innerErr) {
+        setError(innerErr instanceof Error ? innerErr.message : 'Failed to load lecture details');
       }
     } finally {
       setLoading(false);
@@ -273,8 +275,27 @@ export const LectureDetail: React.FC = () => {
         {(processingAI || lecture?.status === 'AI_PROCESSING') && (
           <div className="mb-8 p-6 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-center">
             <Loader2 className="w-8 h-8 text-indigo-400 animate-spin mx-auto mb-3" />
-            <h3 className="text-sm font-bold text-white mb-1">LearnLoop is understanding your lecture...</h3>
+            <h3 className="text-sm font-bold text-white mb-1">Generating AI learning materials...</h3>
             <p className="text-xs text-slate-400">Gemini AI is analyzing transcript concepts, generating explanations, flashcards, and quiz questions.</p>
+          </div>
+        )}
+
+        {/* Error Banner */}
+        {error && (
+          <div className="mb-8 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-300 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-xs">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>{error}</span>
+            </div>
+            {isTranscriptReady && (
+              <button
+                onClick={handleProcessAI}
+                disabled={processingAI}
+                className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/30 rounded-xl text-xs font-semibold shrink-0 transition"
+              >
+                Retry AI Generation
+              </button>
+            )}
           </div>
         )}
 

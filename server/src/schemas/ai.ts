@@ -32,10 +32,16 @@ export const ConceptExplanationsArraySchema = z.array(ConceptExplanationSchema);
 
 export const FlashcardSchema = z.object({
   question: z.string().min(1, 'Flashcard question is required'),
-  answer: z.string().min(1, 'Flashcard answer is required'),
+  answer: z.string().optional().default(''),
+  options: z.array(z.string()).length(4, 'Flashcard must have exactly 4 options'),
+  correctAnswer: z.number().int().min(0).max(3, 'Correct answer index must be 0, 1, 2, or 3'),
+  explanation: z.string().min(1, 'Explanation is required'),
   conceptName: z.string().optional(),
   difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']).catch('MEDIUM'),
-});
+}).transform((card) => ({
+  ...card,
+  answer: card.answer || card.options[card.correctAnswer] || '',
+}));
 
 export const FlashcardsArraySchema = z.array(FlashcardSchema).min(1, 'At least 1 flashcard required');
 
