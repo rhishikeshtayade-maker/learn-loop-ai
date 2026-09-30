@@ -250,7 +250,7 @@ class SupabaseDatabaseService {
       },
     });
 
-    return list.map((item) => ({
+    return list.map((item: any) => ({
       id: item.id,
       user_id: item.userId,
       youtube_url: item.youtubeUrl,
@@ -430,7 +430,7 @@ class SupabaseDatabaseService {
       try {
         await sb.from('concepts').delete().eq('lecture_id', lectureId);
 
-        const rows = concepts.map((c) => ({
+        const rows = concepts.map((c: any) => ({
           lecture_id: lectureId,
           name: c.name,
           description: c.description,
@@ -451,7 +451,7 @@ class SupabaseDatabaseService {
     await prisma.concept.deleteMany({ where: { lectureId } });
 
     const created = await Promise.all(
-      concepts.map((c) =>
+      concepts.map((c: any) =>
         prisma.concept.create({
           data: {
             lectureId,
@@ -465,7 +465,7 @@ class SupabaseDatabaseService {
       )
     );
 
-    return created.map((c) => ({
+    return created.map((c: any) => ({
       id: c.id,
       lecture_id: c.lectureId,
       name: c.name,
@@ -489,7 +489,7 @@ class SupabaseDatabaseService {
 
     for (const exp of explanations) {
       const target = concepts.find(
-        (c) => c.name.toLowerCase().trim() === exp.conceptName.toLowerCase().trim()
+        (c: any) => c.name.toLowerCase().trim() === exp.conceptName.toLowerCase().trim()
       );
       if (!target) continue;
 
@@ -545,7 +545,7 @@ class SupabaseDatabaseService {
       orderBy: { id: 'asc' },
     });
 
-    return list.map((c) => ({
+    return list.map((c: any) => ({
       id: c.id,
       lecture_id: c.lectureId,
       name: c.name,
@@ -668,11 +668,11 @@ class SupabaseDatabaseService {
   }>, savedConcepts: ConceptRecord[]): Promise<FlashcardRecord[]> {
     const sb = getSupabaseAdmin();
 
-    const prepared = flashcards.map((f) => {
+    const prepared = flashcards.map((f: any) => {
       let resolvedConceptId = f.conceptId || null;
       if (!resolvedConceptId && f.conceptName) {
         const found = savedConcepts.find(
-          (c) => c.name.toLowerCase().trim() === f.conceptName?.toLowerCase().trim()
+          (c: any) => c.name.toLowerCase().trim() === f.conceptName?.toLowerCase().trim()
         );
         if (found) resolvedConceptId = found.id;
       }
@@ -699,7 +699,7 @@ class SupabaseDatabaseService {
       try {
         await sb.from('flashcards').delete().eq('lecture_id', lectureId);
         const { data, error } = await sb.from('flashcards').insert(prepared).select('*');
-        if (!error && data) return data.map((row) => this.mapFlashcardRecord(row));
+        if (!error && data) return data.map((row: any) => this.mapFlashcardRecord(row));
         console.warn(`Supabase saveFlashcards failed (${error?.message}). Falling back to Prisma...`);
       } catch (err) {
         console.warn('Supabase saveFlashcards exception, falling back to Prisma:', err);
@@ -709,7 +709,7 @@ class SupabaseDatabaseService {
     // Prisma Fallback
     await prisma.flashcard.deleteMany({ where: { lectureId } });
     const created = await Promise.all(
-      prepared.map((f) => {
+      prepared.map((f: any) => {
         let dbAnswer = f.answer;
         if (f.options && Array.isArray(f.options)) {
           dbAnswer = JSON.stringify({
@@ -731,7 +731,7 @@ class SupabaseDatabaseService {
       })
     );
 
-    return created.map((f) => this.mapFlashcardRecord(f));
+    return created.map((f: any) => this.mapFlashcardRecord(f));
   }
 
   async getFlashcardsByLecture(lectureId: string): Promise<FlashcardRecord[]> {
@@ -743,7 +743,7 @@ class SupabaseDatabaseService {
           .select('*')
           .eq('lecture_id', lectureId)
           .order('created_at', { ascending: true });
-        if (!error && data) return data.map((row) => this.mapFlashcardRecord(row));
+        if (!error && data) return data.map((row: any) => this.mapFlashcardRecord(row));
       } catch {
         // Fallback to Prisma
       }
@@ -751,7 +751,7 @@ class SupabaseDatabaseService {
 
     // Prisma Fallback
     const list = await prisma.flashcard.findMany({ where: { lectureId } });
-    return list.map((f) => this.mapFlashcardRecord(f));
+    return list.map((f: any) => this.mapFlashcardRecord(f));
   }
 
   // =========================================
@@ -780,11 +780,11 @@ class SupabaseDatabaseService {
           .single();
 
         if (!qErr && newQuiz) {
-          const qRows = questions.map((q) => {
+          const qRows = questions.map((q: any) => {
             let resolvedConceptId = q.conceptId || null;
             if (!resolvedConceptId && q.conceptName) {
               const found = savedConcepts.find(
-                (c) => c.name.toLowerCase().trim() === q.conceptName?.toLowerCase().trim()
+                (c: any) => c.name.toLowerCase().trim() === q.conceptName?.toLowerCase().trim()
               );
               if (found) resolvedConceptId = found.id;
             }
@@ -825,11 +825,11 @@ class SupabaseDatabaseService {
     });
 
     const savedQuestions = await Promise.all(
-      questions.map((q) => {
+      questions.map((q: any) => {
         let resolvedConceptId = q.conceptId || null;
         if (!resolvedConceptId && q.conceptName) {
           const found = savedConcepts.find(
-            (c) => c.name.toLowerCase().trim() === q.conceptName?.toLowerCase().trim()
+            (c: any) => c.name.toLowerCase().trim() === q.conceptName?.toLowerCase().trim()
           );
           if (found) resolvedConceptId = found.id;
         }
@@ -849,7 +849,7 @@ class SupabaseDatabaseService {
 
     return {
       quiz: { id: newQuiz.id, lecture_id: newQuiz.lectureId, title: newQuiz.title },
-      questions: savedQuestions.map((sq) => ({
+      questions: savedQuestions.map((sq: any) => ({
         id: sq.id,
         quiz_id: sq.quizId,
         concept_id: sq.conceptId,
@@ -898,7 +898,7 @@ class SupabaseDatabaseService {
 
     return {
       quiz: { id: quiz.id, lecture_id: quiz.lectureId, title: quiz.title },
-      questions: quiz.questions.map((q) => ({
+      questions: quiz.questions.map((q: any) => ({
         id: q.id,
         quiz_id: q.quizId,
         concept_id: q.conceptId,
@@ -1018,7 +1018,7 @@ class SupabaseDatabaseService {
       if (!list || list.length === 0) {
         throw new Error('Quiz questions not found');
       }
-      quizQuestions = list.map((q) => ({
+      quizQuestions = list.map((q: any) => ({
         id: q.id,
         quiz_id: q.quizId,
         concept_id: q.conceptId,
@@ -1139,7 +1139,7 @@ class SupabaseDatabaseService {
 
     // Prisma Fallback
     await Promise.all(
-      answerRecordsToInsert.map((ans) =>
+      answerRecordsToInsert.map((ans: any) =>
         prisma.quizAnswer.create({
           data: {
             attemptId: ans.attempt_id,
@@ -1215,7 +1215,7 @@ class SupabaseDatabaseService {
 
       const answers = answersRes.data || [];
       const totalQuestions = answers.length;
-      const correctAnswers = answers.filter((a) => a.is_correct).length;
+      const correctAnswers = answers.filter((a: any) => a.is_correct).length;
       const lectureId = quizRes.data?.lecture_id || '';
 
       return {
@@ -1237,7 +1237,7 @@ class SupabaseDatabaseService {
     ]);
 
     const totalQuestions = answers.length;
-    const correctAnswers = answers.filter((a) => a.isCorrect).length;
+    const correctAnswers = answers.filter((a: any) => a.isCorrect).length;
     const lectureId = quiz?.lectureId || '';
 
     return {
@@ -1495,7 +1495,7 @@ class SupabaseDatabaseService {
       orderBy: { lastReviewedAt: 'desc' },
     });
 
-    return list.map((m) => ({
+    return list.map((m: any) => ({
       id: m.id,
       user_id: m.userId,
       concept_id: m.conceptId,
@@ -1535,7 +1535,7 @@ class SupabaseDatabaseService {
       orderBy: { scheduledFor: 'asc' },
     });
 
-    return list.map((t) => ({
+    return list.map((t: any) => ({
       id: t.id,
       user_id: t.userId,
       concept_id: t.conceptId,
@@ -1601,8 +1601,8 @@ class SupabaseDatabaseService {
             next_review_at: m.next_review_at,
           }));
 
-          const conceptsMastered = mastery.filter((m) => m.mastery_score >= 80).length;
-          const weakConcepts = mastery.filter((m) => m.mastery_score < 60);
+          const conceptsMastered = mastery.filter((m: any) => m.mastery_score >= 80).length;
+          const weakConcepts = mastery.filter((m: any) => m.mastery_score < 60);
 
           // 4. Fetch Revision Tasks with Concept details
           const { data: taskData } = await sb
@@ -1613,7 +1613,7 @@ class SupabaseDatabaseService {
             .order('scheduled_for', { ascending: true });
 
           const revisionTasks = (taskData || []).map((t: any) => {
-            const matchingMastery = mastery.find((m) => m.concept_id === t.concept_id);
+            const matchingMastery = mastery.find((m: any) => m.concept_id === t.concept_id);
             return {
               id: t.id,
               user_id: t.user_id,
@@ -1631,7 +1631,7 @@ class SupabaseDatabaseService {
 
           // 5. Upcoming Reviews sorted by earliest next_review_at
           const upcomingReviews = [...mastery].sort(
-            (a, b) => new Date(a.next_review_at).getTime() - new Date(b.next_review_at).getTime()
+            (a: any, b: any) => new Date(a.next_review_at).getTime() - new Date(b.next_review_at).getTime()
           );
 
           return {
@@ -1675,7 +1675,7 @@ class SupabaseDatabaseService {
       }),
     ]);
 
-    const formattedLectures = lectures.map((item) => ({
+    const formattedLectures = lectures.map((item: any) => ({
       id: item.id,
       user_id: item.userId,
       youtube_url: item.youtubeUrl,
@@ -1694,11 +1694,11 @@ class SupabaseDatabaseService {
     const quizzesAttempted = quizAttempts.length;
     let averageScore = 0;
     if (quizzesAttempted > 0) {
-      const totalScore = quizAttempts.reduce((sum, a) => sum + (a.score || 0), 0);
+      const totalScore = quizAttempts.reduce((sum: number, a: any) => sum + (a.score || 0), 0);
       averageScore = Math.round(totalScore / quizzesAttempted);
     }
 
-    const mastery = masteryList.map((m) => ({
+    const mastery = masteryList.map((m: any) => ({
       id: m.id,
       user_id: m.userId,
       concept_id: m.conceptId,
@@ -1711,11 +1711,11 @@ class SupabaseDatabaseService {
       next_review_at: m.nextReviewAt.toISOString(),
     }));
 
-    const conceptsMastered = mastery.filter((m) => m.mastery_score >= 80).length;
-    const weakConcepts = mastery.filter((m) => m.mastery_score < 60);
+    const conceptsMastered = mastery.filter((m: any) => m.mastery_score >= 80).length;
+    const weakConcepts = mastery.filter((m: any) => m.mastery_score < 60);
 
-    const revisionTasks = revisionTaskList.map((t) => {
-      const matchingMastery = mastery.find((m) => m.concept_id === t.conceptId);
+    const revisionTasks = revisionTaskList.map((t: any) => {
+      const matchingMastery = mastery.find((m: any) => m.concept_id === t.conceptId);
       return {
         id: t.id,
         user_id: t.userId,
@@ -1732,7 +1732,7 @@ class SupabaseDatabaseService {
     });
 
     const upcomingReviews = [...mastery].sort(
-      (a, b) => new Date(a.next_review_at).getTime() - new Date(b.next_review_at).getTime()
+      (a: any, b: any) => new Date(a.next_review_at).getTime() - new Date(b.next_review_at).getTime()
     );
 
     return {
