@@ -10,6 +10,9 @@ import {
   Send,
   Loader2,
   AlertCircle,
+  CheckCircle2,
+  XCircle,
+  Sparkles,
 } from 'lucide-react';
 
 interface QuizTabProps {
@@ -17,12 +20,20 @@ interface QuizTabProps {
   lectureId?: string;
 }
 
+interface CheckResult {
+  isCorrect: boolean;
+  correctAnswerText: string;
+  explanation: string;
+}
+
 export const QuizTab: React.FC<QuizTabProps> = ({ questions, lectureId }) => {
   const navigate = useNavigate();
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
+  const [checkedResults, setCheckedResults] = useState<Record<string, CheckResult>>({});
   const [starting, setStarting] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,10 +68,58 @@ export const QuizTab: React.FC<QuizTabProps> = ({ questions, lectureId }) => {
   };
 
   const current = questions[currentIndex];
-  const answeredCount = Object.keys(selectedAnswers).filter(id => selectedAnswers[id] && selectedAnswers[id].trim() !== '').length;
+  const currentAnswer = selectedAnswers[current?.id] || '';
+  const currentResult = checkedResults[current?.id];
+
+  const answeredCount = Object.keys(selectedAnswers).filter(
+    (id) => selectedAnswers[id] && selectedAnswers[id].trim() !== ''
+  ).length;
   const isAllAnswered = answeredCount === questions.length;
 
-  // Removed MCQ option handler – using typed answers now
+  const handleCheckAnswer = async () => {
+    if (!lectureId || !current?.id) return;
+    if (!currentAnswer.trim()) {
+      setError('Please type or select an answer before checking.');
+      return;
+    }
+
+    setChecking(true);
+    setError(null);
+    try {
+      const res = await lectureService.checkQuizAnswer(lectureId, current.id, currentAnswer);
+      if (res.success) {
+        setCheckedResults((prev) => ({
+          ...prev,
+          [current.id]: {
+            isCorrect: res.isCorrect,
+            correctAnswerText: res.correctAnswerText,
+            explanation: res.explanation,
+          },
+        }));
+      } else {
+        setError('Failed to check answer.');
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Failed to check answer.');
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const handleSelectOption = (opt: string) => {
+    setSelectedAnswers((prev) => ({
+      ...prev,
+      [current.id]: opt,
+    }));
+    // Clear previous check result when changing answer
+    if (checkedResults[current.id]) {
+      setCheckedResults((prev) => {
+        const copy = { ...prev };
+        delete copy[current.id];
+        return copy;
+      });
+    }
+  };
 
   const handleSubmitQuiz = async () => {
     if (!attemptId) return;
@@ -74,7 +133,7 @@ export const QuizTab: React.FC<QuizTabProps> = ({ questions, lectureId }) => {
 
     const answersPayload = questions.map((q) => ({
       questionId: q.id,
-      selectedAnswer: selectedAnswers[q.id],
+      selectedAnswer: selectedAnswers[q.id] || '',
     }));
 
     try {
@@ -124,7 +183,7 @@ export const QuizTab: React.FC<QuizTabProps> = ({ questions, lectureId }) => {
         <div className="space-y-2">
           <h2 className="text-xl font-bold text-white">Lecture Quiz Ready</h2>
           <p className="text-xs text-slate-400 max-w-md mx-auto">
-            Test your understanding with {questions.length} multiple choice questions generated directly from this lecture.
+            Test your understanding with {questions.length} questions generated directly from this lecture. You can check your answer after each question!
           </p>
         </div>
 
@@ -167,7 +226,7 @@ export const QuizTab: React.FC<QuizTabProps> = ({ questions, lectureId }) => {
             Lecture Quiz ({questions.length} Questions)
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Answer all questions before submitting for instant grading.
+            Answer questions, check your answers instantly, and submit when ready.
           </p>
         </div>
         <span className="text-xs font-semibold text-slate-400 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl">
@@ -183,33 +242,141 @@ export const QuizTab: React.FC<QuizTabProps> = ({ questions, lectureId }) => {
       )}
 
       {/* Question Card */}
-      <div className="glass-card rounded-2xl p-6 sm:p-8 border border-slate-800/80">
-        <div className="flex items-center justify-between mb-4">
+      <div className="glass-card rounded-2xl p-6 sm:p-8 border border-slate-800/80 space-y-6">
+        <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider">
             Question {currentIndex + 1}
           </span>
           {getDifficultyBadge(current?.difficulty)}
         </div>
 
-        <h3 className="text-base font-bold text-white mb-6 leading-snug">
+        <h3 className="text-base font-bold text-white leading-snug">
           {current?.question}
         </h3>
 
+        {/* Quick-Pick Option Chips (if options exist) */}
+        {current?.options && current.options.length > 0 && (
+          <div className="space-y-2">
+            <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+              Quick Options (Click to select or type below):
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {current.options.map((option, idx) => {
+                const isSelected = currentAnswer.trim().toLowerCase() === option.trim().toLowerCase();
+                const letter = String.fromCharCode(65 + idx);
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleSelectOption(option)}
+                    className={`text-left p-3 rounded-xl border text-xs font-medium transition flex items-start gap-2.5 ${
+                      isSelected
+                        ? 'bg-indigo-600/20 border-indigo-500 text-indigo-200 shadow-sm shadow-indigo-500/10'
+                        : 'bg-slate-900/60 hover:bg-slate-800/70 border-slate-800 text-slate-300'
+                    }`}
+                  >
+                    <span
+                      className={`w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                        isSelected ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'
+                      }`}
+                    >
+                      {letter}
+                    </span>
+                    <span className="leading-snug break-words">{option}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Typed Answer Input */}
-        <div className="space-y-3">
+        <div className="space-y-2">
+          <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+            Your Answer:
+          </label>
           <textarea
-            value={selectedAnswers[current?.id] || ''}
-            onChange={(e) =>
+            value={currentAnswer}
+            onChange={(e) => {
               setSelectedAnswers((prev) => ({
                 ...prev,
                 [current?.id]: e.target.value,
-              }))
-            }
-            placeholder="Type your answer here..."
-            className="w-full p-3 rounded-xl border bg-slate-900 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            rows={4}
+              }));
+              if (checkedResults[current?.id]) {
+                setCheckedResults((prev) => {
+                  const copy = { ...prev };
+                  delete copy[current?.id];
+                  return copy;
+                });
+              }
+            }}
+            placeholder="Type your answer or formula here (e.g., F = q(v × B))..."
+            className="w-full p-3.5 rounded-xl border border-slate-800 bg-slate-900/80 text-white text-xs placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition"
+            rows={3}
           />
         </div>
+
+        {/* Check Answer Button & Status */}
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={handleCheckAnswer}
+            disabled={!currentAnswer.trim() || checking}
+            className="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 inline-flex items-center gap-2 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {checking ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Checking Answer...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4 text-indigo-200" />
+                Check Answer
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Checked Result Banner */}
+        {currentResult && (
+          <div
+            className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 animate-in fade-in slide-in-from-top-2 ${
+              currentResult.isCorrect
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
+                : 'bg-rose-500/10 border-rose-500/30 text-rose-200'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              {currentResult.isCorrect ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+              ) : (
+                <XCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+              )}
+              <div className="space-y-2 text-xs flex-1">
+                <div className="font-bold text-sm flex items-center justify-between">
+                  <span>
+                    {currentResult.isCorrect ? '✅ Correct! Excellent understanding.' : '❌ Not quite right.'}
+                  </span>
+                </div>
+
+                {!currentResult.isCorrect && currentResult.correctAnswerText && (
+                  <div className="bg-slate-900/60 p-2.5 rounded-xl border border-rose-500/20">
+                    <span className="text-slate-400 font-medium">Correct Answer: </span>
+                    <span className="text-white font-semibold">{currentResult.correctAnswerText}</span>
+                  </div>
+                )}
+
+                {currentResult.explanation && (
+                  <div className="text-slate-300 leading-relaxed bg-slate-900/40 p-2.5 rounded-xl border border-slate-800/60">
+                    <span className="text-slate-400 font-semibold block mb-0.5">Explanation:</span>
+                    <span>{currentResult.explanation}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Navigation & Submit Controls */}

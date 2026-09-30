@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import db from '../services/supabase/database';
 import { processLectureWithAI } from '../services/aiPipeline';
+import { isAnswerMatch } from '../utils/answerMatch';
 
 /**
  * POST /api/lectures/:id/ai-process
@@ -398,5 +399,64 @@ export async function getQuizAttemptResult(
     res.status(500).json({
       error: 'Failed to retrieve quiz result',
     });
+  }
+}
+
+/**
+ * POST /api/lectures/:id/quiz/check-answer
+ * Checks an individual answer immediately and returns whether it is right/wrong,
+ * the correct answer, and the full explanation.
+ */
+export async function checkQuizAnswer(
+  req: AuthRequest,
+  res: Response
+): Promise<void> {
+  if (!req.user) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+
+  const { id } = req.params;
+  const { questionId, selectedAnswer } = req.body;
+
+  if (!questionId || selectedAnswer === undefined || selectedAnswer === null) {
+    res.status(400).json({ error: 'questionId and selectedAnswer are required' });
+    return;
+  }
+
+  try {
+    const lecture = await db.getLectureById(id, req.user.id);
+    if (!lecture) {
+      res.status(404).json({ error: 'Lecture not found' });
+      return;
+    }
+
+    const quizRes = await db.getQuizByLecture(id);
+    if (!quizRes || !quizRes.questions.length) {
+      res.status(404).json({ error: 'Quiz not found' });
+      return;
+    }
+
+    const question = quizRes.questions.find((q) => q.id === questionId);
+    if (!question) {
+      res.status(404).json({ error: 'Question not found' });
+      return;
+    }
+
+    const correctIdx = question.correct_answer;
+    const correctText = question.options?.[correctIdx] || '';
+
+    const isCorrect = isAnswerMatch(selectedAnswer, correctText, question.options, correctIdx);
+
+    res.json({
+      success: true,
+      isCorrect,
+      correctAnswer: correctIdx,
+      correctAnswerText: correctText,
+      explanation: question.explanation,
+    });
+  } catch (error: any) {
+    console.error('checkQuizAnswer error:', error);
+    res.status(500).json({ error: 'Failed to check answer' });
   }
 }

@@ -86,6 +86,23 @@ export const lectureService = {
     );
   },
 
+  async checkQuizAnswer(
+    lectureId: string,
+    questionId: string,
+    selectedAnswer: string | number
+  ) {
+    return apiRequest<{
+      success: boolean;
+      isCorrect: boolean;
+      correctAnswer: number;
+      correctAnswerText: string;
+      explanation: string;
+    }>(`/api/lectures/${lectureId}/quiz/check-answer`, {
+      method: 'POST',
+      body: JSON.stringify({ questionId, selectedAnswer }),
+    });
+  },
+
   async submitQuizAttempt(
     attemptId: string,
     answers: Array<{ questionId: string; selectedAnswer: string }>

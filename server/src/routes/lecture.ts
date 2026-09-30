@@ -15,6 +15,7 @@ import {
   getLectureQuiz,
   getLectureLearningContent,
   startQuizAttempt,
+  checkQuizAnswer,
 } from '../controllers/ai';
 
 const router = Router();
@@ -35,5 +36,6 @@ router.get('/:id/learning-content', requireAuth, getLectureLearningContent);
 
 // Phase 5 Quiz System
 router.post('/:id/quiz/start', requireAuth, startQuizAttempt);
+router.post('/:id/quiz/check-answer', requireAuth, checkQuizAnswer);
 
 export default router;

@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from './supabaseAdmin';
+import { isAnswerMatch } from '../../utils/answerMatch';
 import prisma from '../../prisma';
 
 export interface ProfileRecord {
@@ -1089,16 +1090,27 @@ class SupabaseDatabaseService {
         throw new Error('Invalid question submitted');
       }
 
-      // Determine correctness based on type of answer
+      // Determine correctness and integer representation based on type of answer
       let isCorrect = false;
+      let selectedAnswerInt = 0;
+
+      const correctOptionText = qRecord.options?.[qRecord.correct_answer] || '';
+
       if (typeof ans.selectedAnswer === 'number') {
-        // Numeric index answer
+        selectedAnswerInt = ans.selectedAnswer;
         isCorrect = ans.selectedAnswer === qRecord.correct_answer;
       } else if (typeof ans.selectedAnswer === 'string') {
-        const studentAnswer = ans.selectedAnswer.trim().toLowerCase();
-        const correctOption = qRecord.options?.[qRecord.correct_answer];
-        const correctText = (correctOption ?? '').trim().toLowerCase();
-        isCorrect = studentAnswer === correctText;
+        const studentAnswer = ans.selectedAnswer.trim();
+        isCorrect = isAnswerMatch(studentAnswer, correctOptionText, qRecord.options, qRecord.correct_answer);
+
+        // Find best option index that corresponds to the student answer
+        const matchedIdx = qRecord.options?.findIndex((opt: string, i: number) =>
+          isAnswerMatch(studentAnswer, opt, qRecord.options, i)
+        );
+
+        selectedAnswerInt = matchedIdx !== undefined && matchedIdx >= 0
+          ? matchedIdx
+          : (isCorrect ? qRecord.correct_answer : 0);
       } else {
         throw new Error('Invalid answer submitted');
       }
@@ -1108,7 +1120,7 @@ class SupabaseDatabaseService {
       answerRecordsToInsert.push({
         attempt_id: attemptId,
         question_id: ans.questionId,
-        selected_answer: ans.selectedAnswer,
+        selected_answer: selectedAnswerInt,
         is_correct: isCorrect,
       });
     }
@@ -1145,7 +1157,7 @@ class SupabaseDatabaseService {
         if (conceptId) {
           const isCorrect = typeof ans.selectedAnswer === 'number'
             ? ans.selectedAnswer === qRecord.correct_answer
-            : (ans.selectedAnswer ?? '').trim().toLowerCase() === (qRecord.options?.[qRecord.correct_answer] ?? '').trim().toLowerCase();
+            : isAnswerMatch(ans.selectedAnswer ?? '', qRecord.options?.[qRecord.correct_answer] ?? '', qRecord.options, qRecord.correct_answer);
           try {
             await this.updateConceptMastery(userId, conceptId, isCorrect);
           } catch (mErr) {
