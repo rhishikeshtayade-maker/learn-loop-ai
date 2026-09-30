@@ -88,7 +88,7 @@ export const lectureService = {
 
   async submitQuizAttempt(
     attemptId: string,
-    answers: Array<{ questionId: string; selectedAnswer: number }>
+    answers: Array<{ questionId: string; selectedAnswer: string }>
   ) {
     return apiRequest<{
       success: boolean;

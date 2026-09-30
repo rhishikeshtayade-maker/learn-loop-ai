@@ -9,38 +9,38 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- 1. PUBLIC PROFILES TABLE
 -- ==========================================
 CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY,
   name TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Trigger to automatically create profile on signup
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO public.profiles (id, name)
-  VALUES (
-    new.id,
-    COALESCE(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1), 'Student')
-  )
-  ON CONFLICT (id) DO UPDATE
-  SET name = EXCLUDED.name;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+-- Trigger to automatically create profile on signup (disabled)
+-- CREATE OR REPLACE FUNCTION public.handle_new_user()
+-- RETURNS TRIGGER AS $$
+-- BEGIN
+--   INSERT INTO public.profiles (id, name)
+--   VALUES (
+--     new.id,
+--     COALESCE(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1), 'Student')
+--   )
+--   ON CONFLICT (id) DO UPDATE
+--   SET name = EXCLUDED.name;
+--   RETURN NEW;
+-- END;
+-- $$ LANGUAGE plpgsql SECURITY DEFINER;
+--
+-- DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+-- CREATE TRIGGER on_auth_user_created
+--   AFTER INSERT ON auth.users;
+--   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- ==========================================
 -- 2. LECTURES TABLE
 -- ==========================================
 CREATE TABLE IF NOT EXISTS public.lectures (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   youtube_url TEXT NOT NULL,
   title TEXT NOT NULL,
   transcript TEXT DEFAULT '',
@@ -128,7 +128,7 @@ CREATE INDEX IF NOT EXISTS idx_quiz_questions_concept_id ON public.quiz_question
 -- ==========================================
 CREATE TABLE IF NOT EXISTS public.quiz_attempts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   quiz_id UUID NOT NULL REFERENCES public.quizzes(id) ON DELETE CASCADE,
   score INT NOT NULL DEFAULT 0,
   started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

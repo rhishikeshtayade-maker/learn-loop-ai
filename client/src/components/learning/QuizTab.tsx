@@ -4,7 +4,6 @@ import type { QuizQuestion } from '../../types/lecture';
 import { lectureService } from '../../services/lecture.service';
 import {
   HelpCircle,
-  CheckCircle,
   ChevronLeft,
   ChevronRight,
   Play,
@@ -22,7 +21,7 @@ export const QuizTab: React.FC<QuizTabProps> = ({ questions, lectureId }) => {
   const navigate = useNavigate();
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
+  const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
   const [starting, setStarting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,17 +57,10 @@ export const QuizTab: React.FC<QuizTabProps> = ({ questions, lectureId }) => {
   };
 
   const current = questions[currentIndex];
-  const selected = selectedAnswers[current?.id];
-  const answeredCount = Object.keys(selectedAnswers).length;
+  const answeredCount = Object.keys(selectedAnswers).filter(id => selectedAnswers[id] && selectedAnswers[id].trim() !== '').length;
   const isAllAnswered = answeredCount === questions.length;
 
-  const handleSelectOption = (optIndex: number) => {
-    if (!current) return;
-    setSelectedAnswers((prev) => ({
-      ...prev,
-      [current.id]: optIndex,
-    }));
-  };
+  // Removed MCQ option handler – using typed answers now
 
   const handleSubmitQuiz = async () => {
     if (!attemptId) return;
@@ -203,36 +195,20 @@ export const QuizTab: React.FC<QuizTabProps> = ({ questions, lectureId }) => {
           {current?.question}
         </h3>
 
-        {/* Options */}
+        {/* Typed Answer Input */}
         <div className="space-y-3">
-          {current?.options.map((option, optIdx) => {
-            const isSelected = selected === optIdx;
-            return (
-              <button
-                key={optIdx}
-                onClick={() => handleSelectOption(optIdx)}
-                className={`w-full p-4 rounded-xl border text-left text-xs font-medium transition flex items-center justify-between gap-3 ${
-                  isSelected
-                    ? 'bg-indigo-600/20 border-indigo-500 text-white shadow-lg shadow-indigo-600/10'
-                    : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:bg-slate-800/80 hover:text-white'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`w-6 h-6 rounded-lg text-[11px] font-bold flex items-center justify-center border ${
-                      isSelected
-                        ? 'bg-indigo-600 text-white border-indigo-400'
-                        : 'bg-slate-800 text-slate-400 border-slate-700'
-                    }`}
-                  >
-                    {String.fromCharCode(65 + optIdx)}
-                  </span>
-                  <span>{option}</span>
-                </div>
-                {isSelected && <CheckCircle className="w-4 h-4 text-indigo-400 shrink-0" />}
-              </button>
-            );
-          })}
+          <textarea
+            value={selectedAnswers[current?.id] || ''}
+            onChange={(e) =>
+              setSelectedAnswers((prev) => ({
+                ...prev,
+                [current?.id]: e.target.value,
+              }))
+            }
+            placeholder="Type your answer here..."
+            className="w-full p-3 rounded-xl border bg-slate-900 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            rows={4}
+          />
         </div>
       </div>
 

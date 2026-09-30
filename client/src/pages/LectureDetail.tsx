@@ -51,13 +51,21 @@ export const LectureDetail: React.FC = () => {
       setSummary(data.lecture.summary || null);
       setFlashcards(data.flashcards || []);
       setQuizQuestions(data.quiz?.questions || []);
-      setError(null);
+      if (data.lecture.status === 'FAILED' && data.lecture.errorMessage) {
+        setError(data.lecture.errorMessage);
+      } else {
+        setError(null);
+      }
     } catch (err) {
       // Fallback single fetch
       try {
         const l = await lectureService.getLectureById(id);
         setLecture(l);
-        setError('Failed to generate learning materials.');
+        if (l.status === 'FAILED' && l.errorMessage) {
+          setError(l.errorMessage);
+        } else {
+          setError('Failed to generate learning materials.');
+        }
       } catch (innerErr) {
         setError(innerErr instanceof Error ? innerErr.message : 'Failed to load lecture details');
       }
@@ -231,14 +239,14 @@ export const LectureDetail: React.FC = () => {
 
             {/* Trigger AI processing button */}
             <div className="shrink-0 flex items-center gap-3">
-              {lecture?.status === 'PENDING' && (
+              {(lecture?.status === 'PENDING' || lecture?.status === 'FAILED') && (
                 <button
                   onClick={handleProcessTranscript}
                   disabled={processingTranscript}
                   className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-indigo-600/20 flex items-center gap-2 transition"
                 >
                   {processingTranscript ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                  <span>Extract Transcript</span>
+                  <span>{lecture?.status === 'FAILED' ? 'Retry Extraction' : 'Extract Transcript'}</span>
                 </button>
               )}
 

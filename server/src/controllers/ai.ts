@@ -203,6 +203,7 @@ export async function getLectureLearningContent(req: AuthRequest, res: Response)
         title: lecture.title,
         youtubeUrl: lecture.youtube_url,
         status: lecture.status,
+        errorMessage: lecture.error_message,
         duration: lecture.duration,
         summary: lecture.summary,
       },
@@ -311,7 +312,7 @@ export async function submitQuizAttempt(
       if (
         !answer ||
         typeof answer.questionId !== 'string' ||
-        !Number.isInteger(answer.selectedAnswer)
+        !(typeof answer.selectedAnswer === 'string' || Number.isInteger(answer.selectedAnswer))
       ) {
         res.status(400).json({
           error: 'Each answer must contain questionId and selectedAnswer',

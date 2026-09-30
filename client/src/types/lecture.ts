@@ -118,7 +118,7 @@ export interface StartQuizResponse {
 
 export interface QuizAnswerPayload {
   questionId: string;
-  selectedAnswer: number;
+  selectedAnswer: string;
 }
 
 export interface SubmitQuizResponse {
