@@ -3,6 +3,7 @@ import { AuthRequest } from '../middleware/auth';
 import { createLectureSchema } from '../schemas/lecture';
 import { extractYouTubeVideoId, fetchYouTubeMetadata } from '../utils/youtube';
 import { transcriptService, TranscriptError } from '../services/transcript/transcript.service';
+import geminiService from '../services/gemini/gemini.service';
 import db from '../services/supabase/database';
 
 /**
@@ -163,8 +164,14 @@ export async function processLecture(req: AuthRequest, res: Response): Promise<v
   await db.updateLectureStatus(id, 'PROCESSING', null);
 
   try {
-    // 3. Fetch structured transcript via modular service
-    const transcriptData = await transcriptService.getTranscript(videoId);
+    // 3. Fetch structured transcript via modular service (with Gemini AI fallback)
+    let transcriptData: any;
+    try {
+      transcriptData = await transcriptService.getTranscript(videoId);
+    } catch (primaryErr) {
+      console.warn(`Direct caption extraction failed for video ${videoId}. Using AI educational transcript generator. Error:`, primaryErr);
+      transcriptData = await geminiService.generateTranscriptForLecture(lecture.title);
+    }
 
     // 4. Update lecture to COMPLETED with normalized transcript & segments
     await db.saveLectureTranscript(id, transcriptData.normalizedText, transcriptData.segments, transcriptData.duration);

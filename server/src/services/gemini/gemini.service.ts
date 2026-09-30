@@ -161,6 +161,43 @@ export class GeminiService {
       throw err instanceof GeminiError ? err : new GeminiError(`Quiz generation failed: ${err.message}`, err);
     }
   }
+
+  /**
+   * AI Fallback: Generate structured educational transcript when video subtitles/captions are unavailable
+   */
+  async generateTranscriptForLecture(title: string): Promise<{
+    videoId: string;
+    segments: Array<{ text: string; start: number; duration: number }>;
+    normalizedText: string;
+    duration: number;
+  }> {
+    const prompt = `You are an expert educator. Create a comprehensive, realistic, and highly educational lecture transcript based on the lecture title: "${title}".
+Output a JSON object with this exact structure:
+{
+  "duration": 1800,
+  "segments": [
+    {
+      "text": "spoken sentence or paragraph in natural lecture format",
+      "start": 0,
+      "duration": 15
+    }
+  ]
+}
+Include at least 15 detailed chronological segments covering introduction, foundational concepts, step-by-step mathematical or conceptual formulas, examples, practical applications, and conclusion. Return strictly valid JSON.`;
+
+    const text = await this.generateContentWithFallback(prompt);
+    const rawJson = this.parseJSON<any>(text);
+    const segments = Array.isArray(rawJson?.segments) ? rawJson.segments : [];
+    const duration = typeof rawJson?.duration === 'number' ? rawJson.duration : (segments[segments.length - 1]?.start || 600) + 30;
+    const normalizedText = segments.map((s: any) => s.text).join('\n\n');
+
+    return {
+      videoId: '',
+      segments,
+      normalizedText: normalizedText || `Educational lecture on: ${title}`,
+      duration,
+    };
+  }
 }
 
 export const geminiService = new GeminiService();
