@@ -10,7 +10,7 @@
     "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue,green\" \"npm run dev:server\" \"npm run dev:client\"",
     "build:client": "npm --prefix client install && npm --prefix client run build",
     "build:server": "npm --prefix server run build",
-    "build": "npm run build:server && npm run build:client",
+    "build": "prisma generate --schema=./prisma/schema.prisma && npm run build:server && npm run build:client",
     "start": "npm --prefix server run start",
     "prisma:generate": "prisma generate --schema=./prisma/schema.prisma",
     "prisma:push": "prisma db push --schema=./prisma/schema.prisma",
