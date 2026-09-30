@@ -47,37 +47,29 @@ app.get('/api/health', async (_req: Request, res: Response) => {
       service: 'LearnLoop AI API',
       database: 'supabase',
       geminiConfigured: !!config.geminiApiKey,
-      timestamp: new Date().toISOString(),
-    });
-  }
-
-  try {
-    // Verify DB connectivity via Prisma fallback
-    await prisma.$queryRaw`SELECT 1`;
-    const userCount = await prisma.user.count();
-    const lectureCount = await prisma.lecture.count();
-
-    res.json({
-      status: 'ok',
-      service: 'LearnLoop AI API',
-      database: 'connected',
-      stats: {
-        users: userCount,
-        lectures: lectureCount,
+      envCheck: {
+        hasSupabaseUrl: !!config.supabaseUrl,
+        hasServiceKey: !!config.supabaseServiceRoleKey,
+        keyLength: config.supabaseServiceRoleKey.length,
       },
-      geminiConfigured: !!config.geminiApiKey,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error('Health check database query failed:', error);
-    res.status(500).json({
-      status: 'degraded',
-      service: 'LearnLoop AI API',
-      database: 'disconnected',
-      error: error instanceof Error ? error.message : 'Unknown database error',
       timestamp: new Date().toISOString(),
     });
   }
+
+  res.json({
+    status: 'degraded',
+    service: 'LearnLoop AI API',
+    database: 'disconnected',
+    envCheck: {
+      hasSupabaseUrl: !!config.supabaseUrl,
+      hasServiceKey: !!config.supabaseServiceRoleKey,
+      supabaseKeysFound: Object.keys(process.env).filter((k) => k.toUpperCase().includes('SUPABASE')),
+      allEnvKeys: Object.keys(process.env).filter((k) => !k.includes('SECRET') && !k.includes('PRIVATE')),
+    },
+    error: 'Supabase client is not initialized',
+    geminiConfigured: !!config.geminiApiKey,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // Authentication Routes
