@@ -121,7 +121,8 @@ class SupabaseDatabaseService {
    * Helper to determine whether Supabase Cloud is active
    */
   private useSupabase(): boolean {
-    return getSupabaseAdmin() !== null;
+    // Enable Supabase usage
+    return true;
   }
 
   // =========================================
@@ -985,7 +986,7 @@ class SupabaseDatabaseService {
   async submitQuizAttempt(
     attemptId: string,
     userId: string,
-    answers: Array<{ questionId: string; selectedAnswer: number }>
+    answers: Array<{ questionId: string; selectedAnswer: string | number }>
   ): Promise<{ attempt: QuizAttemptRecord; score: number; correctAnswers: number; totalQuestions: number }> {
     const sb = getSupabaseAdmin();
 
@@ -1053,7 +1054,7 @@ class SupabaseDatabaseService {
     const answerRecordsToInsert: Array<{
       attempt_id: string;
       question_id: string;
-      selected_answer: number;
+      selected_answer: any;
       is_correct: boolean;
     }> = [];
 
@@ -1063,15 +1064,20 @@ class SupabaseDatabaseService {
         throw new Error('Invalid question submitted');
       }
 
-      if (
-        !Number.isInteger(ans.selectedAnswer) ||
-        ans.selectedAnswer < 0 ||
-        ans.selectedAnswer >= qRecord.options.length
-      ) {
-        throw new Error('Invalid answer option submitted');
+      // Determine correctness based on type of answer
+      let isCorrect = false;
+      if (typeof ans.selectedAnswer === 'number') {
+        // Numeric index answer
+        isCorrect = ans.selectedAnswer === qRecord.correct_answer;
+      } else if (typeof ans.selectedAnswer === 'string') {
+        const studentAnswer = ans.selectedAnswer.trim().toLowerCase();
+        const correctOption = qRecord.options?.[qRecord.correct_answer];
+        const correctText = (correctOption ?? '').trim().toLowerCase();
+        isCorrect = studentAnswer === correctText;
+      } else {
+        throw new Error('Invalid answer submitted');
       }
 
-      const isCorrect = ans.selectedAnswer === qRecord.correct_answer;
       if (isCorrect) correctCount++;
 
       answerRecordsToInsert.push({
@@ -1112,7 +1118,9 @@ class SupabaseDatabaseService {
         const qRecord = questionMap.get(ans.questionId);
         const conceptId = qRecord?.concept_id;
         if (conceptId) {
-          const isCorrect = ans.selectedAnswer === qRecord.correct_answer;
+          const isCorrect = typeof ans.selectedAnswer === 'number'
+            ? ans.selectedAnswer === qRecord.correct_answer
+            : (ans.selectedAnswer ?? '').trim().toLowerCase() === (qRecord.options?.[qRecord.correct_answer] ?? '').trim().toLowerCase();
           try {
             await this.updateConceptMastery(userId, conceptId, isCorrect);
           } catch (mErr) {
@@ -1156,7 +1164,9 @@ class SupabaseDatabaseService {
       const qRecord = questionMap.get(ans.questionId);
       const conceptId = qRecord?.concept_id;
       if (conceptId) {
-        const isCorrect = ans.selectedAnswer === qRecord.correct_answer;
+        const isCorrect = typeof ans.selectedAnswer === 'number'
+          ? ans.selectedAnswer === qRecord.correct_answer
+          : (ans.selectedAnswer ?? '').trim().toLowerCase() === (qRecord.options?.[qRecord.correct_answer] ?? '').trim().toLowerCase();
         try {
           await this.updateConceptMastery(userId, conceptId, isCorrect);
         } catch (mErr) {
