@@ -79,7 +79,7 @@ export const QuizTab: React.FC<QuizTabProps> = ({ questions, lectureId }) => {
   const handleCheckAnswer = async () => {
     if (!lectureId || !current?.id) return;
     if (!currentAnswer.trim()) {
-      setError('Please type or select an answer before checking.');
+      setError('Please type your answer before checking.');
       return;
     }
 
@@ -103,21 +103,6 @@ export const QuizTab: React.FC<QuizTabProps> = ({ questions, lectureId }) => {
       setError(err?.message || 'Failed to check answer.');
     } finally {
       setChecking(false);
-    }
-  };
-
-  const handleSelectOption = (opt: string) => {
-    setSelectedAnswers((prev) => ({
-      ...prev,
-      [current.id]: opt,
-    }));
-    // Clear previous check result when changing answer
-    if (checkedResults[current.id]) {
-      setCheckedResults((prev) => {
-        const copy = { ...prev };
-        delete copy[current.id];
-        return copy;
-      });
     }
   };
 
@@ -183,7 +168,7 @@ export const QuizTab: React.FC<QuizTabProps> = ({ questions, lectureId }) => {
         <div className="space-y-2">
           <h2 className="text-xl font-bold text-white">Lecture Quiz Ready</h2>
           <p className="text-xs text-slate-400 max-w-md mx-auto">
-            Test your understanding with {questions.length} questions generated directly from this lecture. You can check your answer after each question!
+            Test your understanding with {questions.length} questions. Write your answer in the text box and check if it is right or false!
           </p>
         </div>
 
@@ -226,7 +211,7 @@ export const QuizTab: React.FC<QuizTabProps> = ({ questions, lectureId }) => {
             Lecture Quiz ({questions.length} Questions)
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Answer questions, check your answers instantly, and submit when ready.
+            Write your answer in the text box below. It will indicate whether your answer is right or false.
           </p>
         </div>
         <span className="text-xs font-semibold text-slate-400 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl">
@@ -254,47 +239,35 @@ export const QuizTab: React.FC<QuizTabProps> = ({ questions, lectureId }) => {
           {current?.question}
         </h3>
 
-        {/* Quick-Pick Option Chips (if options exist) */}
-        {current?.options && current.options.length > 0 && (
-          <div className="space-y-2">
-            <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-              Quick Options (Click to select or type below):
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {current.options.map((option, idx) => {
-                const isSelected = currentAnswer.trim().toLowerCase() === option.trim().toLowerCase();
-                const letter = String.fromCharCode(65 + idx);
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => handleSelectOption(option)}
-                    className={`text-left p-3 rounded-xl border text-xs font-medium transition flex items-start gap-2.5 ${
-                      isSelected
-                        ? 'bg-indigo-600/20 border-indigo-500 text-indigo-200 shadow-sm shadow-indigo-500/10'
-                        : 'bg-slate-900/60 hover:bg-slate-800/70 border-slate-800 text-slate-300'
-                    }`}
-                  >
-                    <span
-                      className={`w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 ${
-                        isSelected ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'
-                      }`}
-                    >
-                      {letter}
-                    </span>
-                    <span className="leading-snug break-words">{option}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
         {/* Typed Answer Input */}
         <div className="space-y-2">
-          <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-            Your Answer:
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+              Your Answer:
+            </label>
+            {currentResult && (
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border transition-all ${
+                  currentResult.isCorrect
+                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                    : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+                }`}
+              >
+                {currentResult.isCorrect ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    Right
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                    False
+                  </>
+                )}
+              </span>
+            )}
+          </div>
+
           <textarea
             value={currentAnswer}
             onChange={(e) => {
@@ -310,14 +283,34 @@ export const QuizTab: React.FC<QuizTabProps> = ({ questions, lectureId }) => {
                 });
               }
             }}
-            placeholder="Type your answer or formula here (e.g., F = q(v × B))..."
-            className="w-full p-3.5 rounded-xl border border-slate-800 bg-slate-900/80 text-white text-xs placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (currentAnswer.trim() && !checking) {
+                  handleCheckAnswer();
+                }
+              }
+            }}
+            placeholder="Write your answer here (Press Enter to check)..."
+            className={`w-full p-3.5 rounded-xl border text-xs placeholder:text-slate-500 focus:outline-none transition ${
+              currentResult
+                ? currentResult.isCorrect
+                  ? 'bg-emerald-950/20 border-emerald-500/60 text-white focus:ring-2 focus:ring-emerald-500/40'
+                  : 'bg-rose-950/20 border-rose-500/60 text-white focus:ring-2 focus:ring-rose-500/40'
+                : 'bg-slate-900/80 border-slate-800 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500'
+            }`}
             rows={3}
           />
+          <div className="flex items-center justify-between text-[11px] text-slate-500">
+            <span>Press Enter to check answer</span>
+            {currentAnswer.trim() && !currentResult && (
+              <span className="text-amber-400/80">Unchecked</span>
+            )}
+          </div>
         </div>
 
         {/* Check Answer Button & Status */}
-        <div className="pt-1">
+        <div className="pt-1 flex items-center gap-3">
           <button
             type="button"
             onClick={handleCheckAnswer}
@@ -354,10 +347,16 @@ export const QuizTab: React.FC<QuizTabProps> = ({ questions, lectureId }) => {
                 <XCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
               )}
               <div className="space-y-2 text-xs flex-1">
-                <div className="font-bold text-sm flex items-center justify-between">
-                  <span>
-                    {currentResult.isCorrect ? '✅ Correct! Excellent understanding.' : '❌ Not quite right.'}
-                  </span>
+                <div className="font-bold text-sm flex items-center gap-2">
+                  {currentResult.isCorrect ? (
+                    <span className="text-emerald-400 font-extrabold flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4" /> Right
+                    </span>
+                  ) : (
+                    <span className="text-rose-400 font-extrabold flex items-center gap-1.5">
+                      <XCircle className="w-4 h-4" /> False
+                    </span>
+                  )}
                 </div>
 
                 {!currentResult.isCorrect && currentResult.correctAnswerText && (

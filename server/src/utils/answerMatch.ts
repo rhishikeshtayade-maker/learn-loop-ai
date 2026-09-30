@@ -47,6 +47,18 @@ export function isAnswerMatch(
     }
   }
 
+  // Strip leading option identifiers like "A) ", "A. ", "1. ", "Option A: "
+  const cleanOptionPrefix = (str: string) => str.replace(/^(?:option\s+)?[a-d1-4][\).\s:-]+/i, '').trim();
+  const cleanS = cleanOptionPrefix(sLower);
+  const cleanC = cleanOptionPrefix(cLower);
+  if (cleanS && cleanC && cleanS === cleanC) return true;
+
+  // Normalize punctuation and extra spaces
+  const stripPunctuation = (str: string) => str.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+  const strippedS = stripPunctuation(cleanS);
+  const strippedC = stripPunctuation(cleanC);
+  if (strippedS && strippedC && strippedS === strippedC) return true;
+
   // Formula & math expression normalization
   // replace ×, *, · with x, remove spaces and brackets
   const normalizeMath = (str: string) =>
@@ -73,6 +85,12 @@ export function isAnswerMatch(
     if (matchingCount / cWords.length >= 0.6) return true;
     // Or if all student words are in correct answer and there are at least 2 words
     if (sWords.length >= 2 && matchingCount === sWords.length) return true;
+  }
+
+  // Single word or substring match if non-trivial
+  if (strippedS.length >= 3 && strippedC.length >= 3) {
+    if (strippedC.toLowerCase() === strippedS.toLowerCase()) return true;
+    if (strippedC.split(' ').includes(strippedS)) return true;
   }
 
   return false;
