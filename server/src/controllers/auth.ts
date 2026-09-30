@@ -75,6 +75,11 @@ export async function register(req: Request, res: Response): Promise<void> {
     }
 
     // 2. Fallback to Local Auth (Prisma)
+    if (!prisma) {
+      res.status(500).json({ error: 'Database service unavailable' });
+      return;
+    }
+
     const existing = await prisma.user.findUnique({
       where: { email },
     });
@@ -158,6 +163,11 @@ export async function login(req: Request, res: Response): Promise<void> {
     }
 
     // 2. Fallback Local Auth (Prisma)
+    if (!prisma) {
+      res.status(500).json({ error: 'Database service unavailable' });
+      return;
+    }
+
     const user = await prisma.user.findUnique({
       where: { email },
     });
