@@ -11,20 +11,25 @@ export function getSupabaseAdmin(): SupabaseClient | null {
   const serviceKey = config.supabaseServiceRoleKey;
 
   if (url && serviceKey) {
-    supabaseAdminClient = createClient(url, serviceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-      realtime: {
-        transport: ws as any,
-      },
-    });
-    return supabaseAdminClient;
+    try {
+      supabaseAdminClient = createClient(url, serviceKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+        realtime: {
+          transport: ws as any,
+        },
+      });
+      return supabaseAdminClient;
+    } catch (err) {
+      console.error('Failed to create Supabase client:', err);
+      return null;
+    }
   }
 
   if (config.nodeEnv === 'production') {
-    throw new Error('Supabase URL or Service Role Key is missing in production environment variables.');
+    console.error('Supabase URL or Service Role Key is missing in production environment variables.');
   }
 
   return null;

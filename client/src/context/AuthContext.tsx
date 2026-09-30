@@ -34,18 +34,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const login = async (email: string, password: string) => {
-    const res = await apiRequest<{ user: User }>('/api/auth/login', {
+    const res = await apiRequest<{ user: User; token?: string }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
+    if (res.token) {
+      localStorage.setItem('learnloop_auth_token', res.token);
+    }
     setUser(res.user);
   };
 
   const register = async (name: string, email: string, password: string) => {
-    const res = await apiRequest<{ user: User }>('/api/auth/register', {
+    const res = await apiRequest<{ user: User; token?: string }>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify({ name, email, password }),
     });
+    if (res.token) {
+      localStorage.setItem('learnloop_auth_token', res.token);
+    }
     setUser(res.user);
   };
 
@@ -53,6 +59,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       await apiRequest('/api/auth/logout', { method: 'POST' });
     } finally {
+      localStorage.removeItem('learnloop_auth_token');
       setUser(null);
     }
   };

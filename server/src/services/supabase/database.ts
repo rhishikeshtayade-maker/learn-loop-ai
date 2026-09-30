@@ -141,6 +141,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) return null;
     const u = await prisma.user.findUnique({ where: { id: userId } });
     if (!u) return null;
     return { id: u.id, name: u.name, email: u.email, created_at: u.createdAt.toISOString() };
@@ -175,6 +176,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) throw new Error('Database service unavailable');
     await prisma.user.upsert({
       where: { id: data.userId },
       create: {
@@ -240,6 +242,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) return [];
     const list = await prisma.lecture.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
@@ -300,6 +303,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) return null;
     const item = await prisma.lecture.findFirst({
       where: { id, userId },
       include: {
@@ -353,6 +357,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) return;
     await prisma.lecture.update({
       where: { id },
       data: {
@@ -385,6 +390,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) return;
     await prisma.lecture.update({
       where: { id },
       data: {
@@ -409,6 +415,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) return false;
     const existing = await prisma.lecture.findFirst({ where: { id, userId } });
     if (!existing) return false;
     await prisma.lecture.delete({ where: { id } });
@@ -448,6 +455,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) return [];
     await prisma.concept.deleteMany({ where: { lectureId } });
 
     const created = await Promise.all(
@@ -512,6 +520,7 @@ class SupabaseDatabaseService {
         }
       }
 
+      if (!prisma) continue;
       try {
         await prisma.concept.update({
           where: { id: target.id },
@@ -541,6 +550,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) return [];
     const list = await prisma.concept.findMany({
       where: { lectureId },
       orderBy: { id: 'asc' },
@@ -579,6 +589,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) return;
     await prisma.lecture.update({
       where: { id: lectureId },
       data: {
@@ -708,6 +719,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) return [];
     await prisma.flashcard.deleteMany({ where: { lectureId } });
     const created = await Promise.all(
       prepared.map((f: any) => {
@@ -751,6 +763,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) return [];
     const list = await prisma.flashcard.findMany({ where: { lectureId } });
     return list.map((f: any) => this.mapFlashcardRecord(f));
   }
@@ -817,6 +830,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) throw new Error('Database service unavailable');
     await prisma.quiz.deleteMany({ where: { lectureId } });
 
     const newQuiz = await prisma.quiz.create({
@@ -896,6 +910,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) return null;
     const quiz = await prisma.quiz.findFirst({
       where: { lectureId },
       include: { questions: true },
@@ -941,6 +956,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) throw new Error('Database service unavailable');
     const created = await prisma.quizAttempt.create({
       data: {
         userId,
@@ -974,6 +990,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) return null;
     const item = await prisma.quizAttempt.findFirst({
       where: { id: attemptId, userId },
     });
@@ -1019,6 +1036,7 @@ class SupabaseDatabaseService {
       }
       quizQuestions = data;
     } else {
+      if (!prisma) throw new Error('Database service unavailable');
       const list = await prisma.quizQuestion.findMany({
         where: { quizId: attempt.quiz_id },
       });
@@ -1145,6 +1163,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) throw new Error('Database service unavailable');
     await Promise.all(
       answerRecordsToInsert.map((ans: any) =>
         prisma.quizAnswer.create({
@@ -1238,6 +1257,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) return null;
     const [answers, quiz] = await Promise.all([
       prisma.quizAnswer.findMany({ where: { attemptId } }),
       prisma.quiz.findUnique({ where: { id: attempt.quiz_id } }),
@@ -1320,6 +1340,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) throw new Error('Database service unavailable');
     const existing = await prisma.conceptMastery.findUnique({
       where: {
         userId_conceptId: {
@@ -1432,6 +1453,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) throw new Error('Database service unavailable');
     const existingTask = await prisma.revisionTask.findFirst({
       where: {
         userId,
@@ -1494,6 +1516,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) return [];
     const whereClause: any = { userId };
     if (conceptId) whereClause.conceptId = conceptId;
 
@@ -1532,6 +1555,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) return [];
     const whereClause: any = { userId };
     if (!includeCompleted) {
       whereClause.completed = false;
@@ -1661,6 +1685,7 @@ class SupabaseDatabaseService {
     }
 
     // Prisma Fallback
+    if (!prisma) throw new Error('Database service unavailable');
     const [lectures, quizAttempts, masteryList, revisionTaskList] = await Promise.all([
       prisma.lecture.findMany({
         where: { userId },

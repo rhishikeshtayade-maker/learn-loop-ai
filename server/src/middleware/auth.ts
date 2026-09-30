@@ -26,72 +26,85 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
       token = req.headers.authorization.split(' ')[1];
     }
 
+    if (token) {
+      token = token.trim();
+    }
+
     if (!token) {
       res.status(401).json({ error: 'Authentication required. Please log in.' });
       return;
     }
 
+    // 1. Try Supabase Auth verification
     const sb = getSupabaseAdmin();
     if (sb) {
-      const { data, error } = await sb.auth.getUser(token);
-      
-      // If error occurs with Supabase Auth, return 401 instead of falling through to Prisma
-      if (error || !data?.user) {
-        res.status(401).json({ error: 'Session expired or invalid. Please log in again.' });
-        return;
-      }
-      
-      const sbUser = data.user;
-      const profile = await db.getProfile(sbUser.id);
-      const userName = profile?.name || sbUser.user_metadata?.name || 'Student';
-      req.user = {
-        id: sbUser.id,
-        email: sbUser.email || '',
-        name: userName,
-      };
+      try {
+        const { data, error } = await sb.auth.getUser(token);
+        if (!error && data?.user) {
+          const sbUser = data.user;
+          let userName = sbUser.user_metadata?.name || 'Student';
 
-      // Ensure user exists in Prisma for database fallback operations
-      if (prisma) {
-        await prisma.user.upsert({
-          where: { id: sbUser.id },
-          create: {
+          try {
+            const profile = await db.getProfile(sbUser.id);
+            if (profile?.name) {
+              userName = profile.name;
+            }
+          } catch (profileErr) {
+            console.warn('Could not fetch user profile in requireAuth:', profileErr);
+          }
+
+          req.user = {
             id: sbUser.id,
-            email: sbUser.email || `${sbUser.id}@placeholder.local`,
+            email: sbUser.email || '',
             name: userName,
-            passwordHash: '',
-          },
-          update: {
-            name: userName,
-          },
-        }).catch(() => {});
+          };
+
+          return next();
+        }
+      } catch (sbErr) {
+        console.warn('Supabase auth.getUser exception:', sbErr);
       }
-
-      next();
-      return;
     }
 
-    // 2. Fallback to JWT verification if Supabase Auth check token wasn't a Supabase session or running locally
-    const decoded = verifyToken(token);
-    if (!decoded || !decoded.userId) {
-      res.status(401).json({ error: 'Session expired or invalid. Please log in again.' });
-      return;
+    // 2. Fallback to JWT verification (for local auth or local fallback tokens)
+    try {
+      const decoded = verifyToken(token);
+      if (decoded && decoded.userId) {
+        let userName = 'Student';
+
+        if (sb) {
+          try {
+            const profile = await db.getProfile(decoded.userId);
+            if (profile?.name) userName = profile.name;
+          } catch {}
+        } else if (prisma) {
+          try {
+            const user = await prisma.user.findUnique({
+              where: { id: decoded.userId },
+              select: { id: true, email: true, name: true },
+            });
+            if (user) {
+              req.user = user;
+              return next();
+            }
+          } catch {}
+        }
+
+        req.user = {
+          id: decoded.userId,
+          email: decoded.email || '',
+          name: userName,
+        };
+        return next();
+      }
+    } catch (jwtErr) {
+      console.warn('JWT verification fallback failed:', jwtErr);
     }
 
-    // Verify user exists in database
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-      select: { id: true, email: true, name: true },
-    });
-
-    if (!user) {
-      res.status(401).json({ error: 'User no longer exists.' });
-      return;
-    }
-
-    req.user = user;
-    next();
+    res.status(401).json({ error: 'Session expired or invalid. Please log in again.' });
   } catch (error) {
     console.error('requireAuth middleware error:', error);
-    res.status(500).json({ error: 'Authentication verification failed.' });
+    const message = error instanceof Error ? error.message : 'Authentication verification failed.';
+    res.status(401).json({ error: message });
   }
 }

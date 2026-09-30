@@ -21,6 +21,13 @@ export async function apiRequest<T = any>(
     headers.set('Cache-Control', 'no-cache');
   }
 
+  try {
+    const token = localStorage.getItem('learnloop_auth_token');
+    if (token && !headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+  } catch {}
+
   const response = await fetch(endpoint, {
     ...options,
     headers,
