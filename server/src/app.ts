@@ -42,10 +42,19 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.get('/api/health', async (_req: Request, res: Response) => {
   const sb = getSupabaseAdmin();
   if (sb) {
+    let userCount = 0;
+    try {
+      const { count } = await sb.from('User').select('*', { count: 'exact', head: true });
+      userCount = count || 0;
+    } catch {
+      userCount = 0;
+    }
+
     return res.json({
       status: 'ok',
       service: 'LearnLoop AI API',
       database: 'supabase',
+      stats: { users: userCount },
       geminiConfigured: !!config.geminiApiKey,
       envCheck: {
         hasSupabaseUrl: !!config.supabaseUrl,

@@ -8,6 +8,21 @@ import config from '../config';
 import { getSupabaseAdmin } from '../services/supabase/supabaseAdmin';
 import db from '../services/supabase/database';
 
+import { createClient } from '@supabase/supabase-js';
+import ws from 'ws';
+
+function createEphemeralAuthClient() {
+  return createClient(config.supabaseUrl, config.supabaseServiceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+    realtime: {
+      transport: ws as any,
+    },
+  });
+}
+
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: config.nodeEnv === 'production',
@@ -38,7 +53,8 @@ export async function register(req: Request, res: Response): Promise<void> {
       });
 
       if (error || !data?.user) {
-        if (error?.message?.toLowerCase().includes('already registered')) {
+        const msg = (error?.message || '').toLowerCase();
+        if (msg.includes('already') || msg.includes('exists') || msg.includes('duplicate')) {
           res.status(409).json({ error: 'An account with this email address already exists.' });
           return;
         }
@@ -55,9 +71,10 @@ export async function register(req: Request, res: Response): Promise<void> {
         updated_at: new Date().toISOString(),
       });
 
-      // Sign in to get session token
-      const { data: sessionData } = await sb.auth.signInWithPassword({ email, password });
-      const token = sessionData.session?.access_token || generateToken({ userId: user.id, email: user.email! });
+      // Sign in on an isolated client so getSupabaseAdmin() is NEVER polluted with a user session
+      const authClient = createEphemeralAuthClient();
+      const { data: sessionData } = await authClient.auth.signInWithPassword({ email, password });
+      const token = sessionData?.session?.access_token || generateToken({ userId: user.id, email: user.email! });
 
       res.cookie(AUTH_COOKIE_NAME, token, COOKIE_OPTIONS);
 
@@ -136,8 +153,9 @@ export async function login(req: Request, res: Response): Promise<void> {
 
     const sb = getSupabaseAdmin();
     if (sb) {
-      // 1. Supabase Auth Login
-      const { data, error } = await sb.auth.signInWithPassword({ email, password });
+      // 1. Supabase Auth Login via isolated client
+      const authClient = createEphemeralAuthClient();
+      const { data, error } = await authClient.auth.signInWithPassword({ email, password });
       if (error || !data?.user || !data?.session) {
         res.status(401).json({ error: 'Invalid email or password.' });
         return;

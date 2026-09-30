@@ -164,13 +164,21 @@ export async function processLecture(req: AuthRequest, res: Response): Promise<v
   await db.updateLectureStatus(id, 'PROCESSING', null);
 
   try {
-    // 3. Fetch structured transcript via modular service (with Gemini AI fallback)
+    // 3. Fetch structured transcript via modular service (with Gemini AI fallback for valid lectures)
     let transcriptData: any;
     try {
       transcriptData = await transcriptService.getTranscript(videoId);
     } catch (primaryErr) {
-      console.warn(`Direct caption extraction failed for video ${videoId}. Using AI educational transcript generator. Error:`, primaryErr);
-      transcriptData = await geminiService.generateTranscriptForLecture(lecture.title);
+      if (lecture.title && !lecture.title.startsWith('YouTube Lecture (')) {
+        console.warn(`Direct caption extraction failed for video ${videoId}. Using AI educational transcript generator. Error:`, primaryErr);
+        try {
+          transcriptData = await geminiService.generateTranscriptForLecture(lecture.title);
+        } catch (geminiErr) {
+          throw primaryErr;
+        }
+      } else {
+        throw primaryErr;
+      }
     }
 
     // 4. Update lecture to COMPLETED with normalized transcript & segments
