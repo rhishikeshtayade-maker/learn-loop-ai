@@ -33,17 +33,25 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
 
     const sb = getSupabaseAdmin();
     if (sb) {
-      const { data: { user: sbUser }, error } = await sb.auth.getUser(token);
-      if (!error && sbUser) {
-        const profile = await db.getProfile(sbUser.id);
-        const userName = profile?.name || sbUser.user_metadata?.name || 'Student';
-        req.user = {
-          id: sbUser.id,
-          email: sbUser.email || '',
-          name: userName,
-        };
+      const { data, error } = await sb.auth.getUser(token);
+      
+      // If error occurs with Supabase Auth, return 401 instead of falling through to Prisma
+      if (error || !data?.user) {
+        res.status(401).json({ error: 'Session expired or invalid. Please log in again.' });
+        return;
+      }
+      
+      const sbUser = data.user;
+      const profile = await db.getProfile(sbUser.id);
+      const userName = profile?.name || sbUser.user_metadata?.name || 'Student';
+      req.user = {
+        id: sbUser.id,
+        email: sbUser.email || '',
+        name: userName,
+      };
 
-        // Ensure user exists in Prisma for database fallback operations
+      // Ensure user exists in Prisma for database fallback operations
+      if (prisma) {
         await prisma.user.upsert({
           where: { id: sbUser.id },
           create: {
@@ -56,10 +64,10 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
             name: userName,
           },
         }).catch(() => {});
-
-        next();
-        return;
       }
+
+      next();
+      return;
     }
 
     // 2. Fallback to JWT verification if Supabase Auth check token wasn't a Supabase session or running locally

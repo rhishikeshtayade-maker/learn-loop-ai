@@ -37,7 +37,7 @@ export async function register(req: Request, res: Response): Promise<void> {
         email_confirm: true,
       });
 
-      if (error || !data.user) {
+      if (error || !data?.user) {
         if (error?.message?.toLowerCase().includes('already registered')) {
           res.status(409).json({ error: 'An account with this email address already exists.' });
           return;
@@ -133,7 +133,7 @@ export async function login(req: Request, res: Response): Promise<void> {
     if (sb) {
       // 1. Supabase Auth Login
       const { data, error } = await sb.auth.signInWithPassword({ email, password });
-      if (error || !data.user || !data.session) {
+      if (error || !data?.user || !data?.session) {
         res.status(401).json({ error: 'Invalid email or password.' });
         return;
       }
