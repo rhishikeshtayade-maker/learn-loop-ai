@@ -16,6 +16,8 @@ import {
   getLectureLearningContent,
   startQuizAttempt,
   checkQuizAnswer,
+  getLectureKnowledgeGraph,
+  exploreKnowledgeGraphConcept,
 } from '../controllers/ai';
 
 const router = Router();
@@ -33,6 +35,10 @@ router.get('/:id/summary', requireAuth, getLectureSummary);
 router.get('/:id/flashcards', requireAuth, getLectureFlashcards);
 router.get('/:id/quiz', requireAuth, getLectureQuiz);
 router.get('/:id/learning-content', requireAuth, getLectureLearningContent);
+
+// AI Knowledge Discovery Graph Endpoints
+router.get('/:id/knowledge-graph', requireAuth, getLectureKnowledgeGraph);
+router.post('/:id/knowledge-graph/explore', requireAuth, exploreKnowledgeGraphConcept);
 
 // Phase 5 Quiz System
 router.post('/:id/quiz/start', requireAuth, startQuizAttempt);

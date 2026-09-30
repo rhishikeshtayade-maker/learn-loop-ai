@@ -45,6 +45,18 @@ export interface ConceptRecord {
   created_at?: string;
 }
 
+export interface ConceptRelationshipRecord {
+  id: string;
+  lecture_id: string;
+  source_concept_id: string;
+  target_concept_id: string;
+  relationship_type: string;
+  confidence: number;
+  description?: string | null;
+  created_at?: string;
+}
+
+
 export interface FlashcardRecord {
   id: string;
   lecture_id: string;
@@ -566,6 +578,109 @@ class SupabaseDatabaseService {
       timestamp_start: c.timestampStart,
       timestamp_end: c.timestampEnd,
     }));
+  }
+
+  // =========================================
+  // CONCEPT RELATIONSHIPS (KNOWLEDGE GRAPH)
+  // =========================================
+  async saveConceptRelationships(
+    lectureId: string,
+    relationships: Array<{
+      sourceConceptId: string;
+      targetConceptId: string;
+      relationshipType: string;
+      confidence?: number;
+      description?: string;
+    }>
+  ): Promise<ConceptRelationshipRecord[]> {
+    if (!relationships || relationships.length === 0) return [];
+
+    const sb = getSupabaseAdmin();
+    const rows = relationships.map((r) => ({
+      lecture_id: lectureId,
+      source_concept_id: r.sourceConceptId,
+      target_concept_id: r.targetConceptId,
+      relationship_type: r.relationshipType,
+      confidence: typeof r.confidence === 'number' ? r.confidence : 1.0,
+      description: r.description || null,
+    }));
+
+    if (sb) {
+      try {
+        const { data, error } = await sb
+          .from('concept_relationships')
+          .upsert(rows, { onConflict: 'source_concept_id,target_concept_id,relationship_type' })
+          .select('*');
+
+        if (!error && data && data.length > 0) {
+          return data;
+        }
+        if (error) {
+          console.warn(`Supabase concept_relationships notice (${error.message}). Saving to lecture summary fallback...`);
+        }
+      } catch (err: any) {
+        console.warn('Supabase concept_relationships table exception:', err?.message || err);
+      }
+
+      // Resilient fallback: store in lecture summary JSON so graph is persisted even if table creation hasn't run yet
+      try {
+        const { data: lec } = await sb.from('lectures').select('summary').eq('id', lectureId).maybeSingle();
+        const currentSummary = typeof lec?.summary === 'object' && lec?.summary ? lec.summary : {};
+        const storedRelationships = rows.map((r, i) => ({
+          id: `rel-${i}-${Date.now()}`,
+          ...r,
+          created_at: new Date().toISOString(),
+        }));
+        await sb
+          .from('lectures')
+          .update({
+            summary: {
+              ...currentSummary,
+              conceptRelationships: storedRelationships,
+            },
+          })
+          .eq('id', lectureId);
+        return storedRelationships;
+      } catch (sumErr) {
+        console.warn('Fallback save to lecture summary failed:', sumErr);
+      }
+    }
+
+    return rows.map((r, i) => ({
+      id: `rel-mem-${i}`,
+      ...r,
+      created_at: new Date().toISOString(),
+    }));
+  }
+
+  async getConceptRelationships(lectureId: string): Promise<ConceptRelationshipRecord[]> {
+    const sb = getSupabaseAdmin();
+    if (sb) {
+      try {
+        const { data, error } = await sb
+          .from('concept_relationships')
+          .select('*')
+          .eq('lecture_id', lectureId);
+
+        if (!error && data && data.length > 0) {
+          return data;
+        }
+      } catch {
+        // Fallback to checking lecture summary
+      }
+
+      // Check lecture summary fallback
+      try {
+        const { data: lec } = await sb.from('lectures').select('summary').eq('id', lectureId).maybeSingle();
+        if (lec?.summary?.conceptRelationships && Array.isArray(lec.summary.conceptRelationships)) {
+          return lec.summary.conceptRelationships;
+        }
+      } catch {
+        // Ignore
+      }
+    }
+
+    return [];
   }
 
   // =========================================

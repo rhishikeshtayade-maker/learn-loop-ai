@@ -22,6 +22,8 @@ import {
   Check,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { KnowledgeGraphCard } from '../components/dashboard/KnowledgeGraphCard';
+
 
 interface DashboardStats {
   totalLectures: number;
@@ -230,6 +232,13 @@ export const Dashboard: React.FC = () => {
             <p className="text-[11px] text-slate-500 mt-1">Mastery score ≥ 80%</p>
           </div>
         </div>
+
+        {/* AI Knowledge Discovery Graph Preview Card */}
+        <KnowledgeGraphCard
+          recentLectures={recentLectures}
+          conceptsCount={mastery.length}
+          weakCount={weakConcepts.length}
+        />
 
         {/* Grid Container for Weak Concepts & Revision Tasks */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

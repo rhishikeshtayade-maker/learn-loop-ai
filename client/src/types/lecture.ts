@@ -181,3 +181,83 @@ export interface RevisionTask {
   created_at?: string;
   createdAt?: string;
 }
+
+export type RelationshipType = 'PREREQUISITE' | 'RELATED_TO' | 'PART_OF' | 'LEADS_TO' | 'APPLICATION_OF';
+
+export interface ConceptRelationship {
+  id: string;
+  sourceConceptId: string;
+  targetConceptId: string;
+  relationshipType: RelationshipType;
+  confidence: number;
+  description?: string;
+}
+
+export interface KnowledgeGraphNode {
+  id: string;
+  name: string;
+  description: string;
+  importance: 'HIGH' | 'MEDIUM' | 'LOW';
+  masteryScore: number;
+  masteryStatus: 'strong' | 'developing' | 'weak' | 'untested';
+  attemptsCount: number;
+  simpleExplanation?: string | null;
+  detailedExplanation?: string | null;
+  example?: string | null;
+  commonMisconception?: string | null;
+  keyTakeaway?: string | null;
+  timestampStart?: number | null;
+  timestampEnd?: number | null;
+}
+
+export interface KnowledgeGraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  relationshipType: RelationshipType;
+  confidence: number;
+  description?: string;
+}
+
+export interface KnowledgeGap {
+  sourceConceptId: string;
+  sourceConceptName: string;
+  targetConceptId: string;
+  targetConceptName: string;
+  masteryScore: number;
+  reason: string;
+  recommendedAction: {
+    type: string;
+    conceptId: string;
+    conceptName: string;
+    estimatedMinutes: number;
+  };
+}
+
+export interface KnowledgeGraphData {
+  success: boolean;
+  lectureId: string;
+  lectureTitle: string;
+  nodes: KnowledgeGraphNode[];
+  edges: KnowledgeGraphEdge[];
+  knowledgeGaps: KnowledgeGap[];
+  stats: {
+    totalConcepts: number;
+    totalRelationships: number;
+    masteredCount: number;
+    developingCount: number;
+    weakCount: number;
+    untestedCount: number;
+    knowledgeGapCount: number;
+  };
+}
+
+export interface ConceptExploration {
+  conceptName: string;
+  summary: string;
+  prerequisites: string[];
+  realWorldApplications: string[];
+  suggestedQuestions: string[];
+  keyInsights: string[];
+}
+

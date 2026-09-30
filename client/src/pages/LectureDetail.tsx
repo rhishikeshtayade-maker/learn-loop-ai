@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { TranscriptViewer } from '../components/TranscriptViewer';
 import { ConceptsTab } from '../components/learning/ConceptsTab';
 import { SummaryTab } from '../components/learning/SummaryTab';
 import { FlashcardsTab } from '../components/learning/FlashcardsTab';
 import { QuizTab } from '../components/learning/QuizTab';
+import { KnowledgeGraphTab } from '../components/learning/KnowledgeGraphTab';
 import { lectureService } from '../services/lecture.service';
 import type { Lecture, Concept, SummaryData, Flashcard, QuizQuestion } from '../types/lecture';
 import {
@@ -24,12 +25,15 @@ import {
   CreditCard,
   HelpCircle,
   Brain,
+  Network,
 } from 'lucide-react';
 
-type TabType = 'overview' | 'concepts' | 'summary' | 'flashcards' | 'quiz' | 'transcript';
+type TabType = 'overview' | 'concepts' | 'graph' | 'summary' | 'flashcards' | 'quiz' | 'transcript';
+
 
 export const LectureDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const [lecture, setLecture] = useState<Lecture | null>(null);
   const [concepts, setConcepts] = useState<Concept[]>([]);
   const [summary, setSummary] = useState<SummaryData | string | null>(null);
@@ -41,6 +45,14 @@ export const LectureDetail: React.FC = () => {
   const [processingTranscript, setProcessingTranscript] = useState(false);
   const [processingAI, setProcessingAI] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab') as TabType;
+    if (tabParam && ['overview', 'concepts', 'graph', 'summary', 'flashcards', 'quiz', 'transcript'].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
+
 
   const fetchContent = useCallback(async () => {
     if (!id) return;
@@ -337,6 +349,20 @@ export const LectureDetail: React.FC = () => {
           </button>
 
           <button
+            onClick={() => setActiveTab('graph')}
+            className={`px-4 py-3 text-xs font-semibold border-b-2 flex items-center gap-2 shrink-0 transition ${
+              activeTab === 'graph'
+                ? 'border-indigo-500 text-indigo-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Network className="w-4 h-4" /> Knowledge Graph
+            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+              Interactive
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('summary')}
             className={`px-4 py-3 text-xs font-semibold border-b-2 flex items-center gap-2 shrink-0 transition ${
               activeTab === 'summary'
@@ -430,7 +456,7 @@ export const LectureDetail: React.FC = () => {
                 <Sparkles className="w-10 h-10 text-indigo-400 mx-auto mb-3 animate-bounce" />
                 <h3 className="text-base font-bold text-white mb-2">Ready for Gemini AI Transformation</h3>
                 <p className="text-xs text-slate-400 max-w-lg mx-auto mb-6">
-                  Transform this lecture transcript into structured learning concepts, active-recall flashcards, and a 4-option quiz.
+                  Transform this lecture transcript into structured learning concepts, active-recall flashcards, and an adaptive quiz.
                 </p>
                 <button
                   onClick={handleProcessAI}
@@ -447,12 +473,18 @@ export const LectureDetail: React.FC = () => {
               <div className="glass-card rounded-2xl p-6 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div>
                   <h3 className="text-sm font-bold text-white mb-1">Your learning materials are ready!</h3>
-                  <p className="text-xs text-slate-400">Explore concepts, study flashcards, or test your knowledge with the quiz.</p>
+                  <p className="text-xs text-slate-400">Explore concepts, inspect the knowledge graph, study flashcards, or take a quiz.</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <button
+                    onClick={() => setActiveTab('graph')}
+                    className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-semibold rounded-xl hover:from-indigo-500 hover:to-purple-500 transition flex items-center gap-1.5 shadow-md shadow-indigo-600/20"
+                  >
+                    <Network className="w-3.5 h-3.5" /> Discovery Graph
+                  </button>
                   <button
                     onClick={() => setActiveTab('concepts')}
-                    className="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl hover:bg-indigo-500 transition"
+                    className="px-4 py-2 bg-slate-800 text-slate-200 text-xs font-semibold rounded-xl hover:bg-slate-700 transition"
                   >
                     Explore Concepts
                   </button>
@@ -469,6 +501,7 @@ export const LectureDetail: React.FC = () => {
         )}
 
         {activeTab === 'concepts' && <ConceptsTab concepts={concepts} />}
+        {activeTab === 'graph' && id && <KnowledgeGraphTab lectureId={id} />}
         {activeTab === 'summary' && <SummaryTab summary={summary} />}
         {activeTab === 'flashcards' && <FlashcardsTab flashcards={flashcards} />}
         {activeTab === 'quiz' && <QuizTab questions={quizQuestions} lectureId={id} />}

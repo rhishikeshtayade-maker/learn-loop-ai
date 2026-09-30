@@ -9,6 +9,8 @@ import type {
   SummaryData,
   Flashcard,
   QuizData,
+  KnowledgeGraphData,
+  ConceptExploration,
 } from '../types/lecture';
 
 export const lectureService = {
@@ -212,4 +214,20 @@ export const lectureService = {
       recentLectures: Lecture[];
     }>('/api/dashboard');
   },
+
+  // AI Knowledge Discovery Graph
+  async getKnowledgeGraph(lectureId: string): Promise<KnowledgeGraphData> {
+    return apiRequest<KnowledgeGraphData>(`/api/lectures/${lectureId}/knowledge-graph`);
+  },
+
+  async exploreConcept(lectureId: string, conceptId: string): Promise<{ success: boolean; conceptId: string; exploration: ConceptExploration }> {
+    return apiRequest<{ success: boolean; conceptId: string; exploration: ConceptExploration }>(
+      `/api/lectures/${lectureId}/knowledge-graph/explore`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ conceptId }),
+      }
+    );
+  },
 };
+

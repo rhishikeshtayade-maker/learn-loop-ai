@@ -5,12 +5,15 @@ import { getSummaryPrompt } from './prompts/summaryPrompt';
 import { getExplanationPrompt } from './prompts/explanationPrompt';
 import { getFlashcardPrompt } from './prompts/flashcardPrompt';
 import { getQuizPrompt } from './prompts/quizPrompt';
+import { getRelationshipPrompt, getExploreConceptPrompt } from './prompts/relationshipPrompt';
 import {
   ConceptsArraySchema,
   SummarySchema,
   ConceptExplanationsArraySchema,
   FlashcardsArraySchema,
   QuizQuestionsArraySchema,
+  ConceptRelationshipsArraySchema,
+  ConceptExplorationSchema,
 } from '../../schemas/ai';
 
 export class GeminiError extends Error {
@@ -163,6 +166,67 @@ export class GeminiService {
   }
 
   /**
+   * 6. Generate Concept Relationships (AI Knowledge Discovery Graph)
+   */
+  async generateConceptRelationships(
+    transcript: string,
+    concepts: Array<{ id: string; name: string; description: string }>
+  ) {
+    if (!concepts || concepts.length < 2) {
+      return [];
+    }
+
+    const prompt = getRelationshipPrompt(transcript, concepts);
+    try {
+      const text = await this.generateContentWithFallback(prompt);
+      const rawJson = this.parseJSON<unknown>(text);
+      const validated = ConceptRelationshipsArraySchema.parse(rawJson);
+      
+      // Filter out self-loops or invalid IDs
+      const validConceptIds = new Set(concepts.map((c) => c.id));
+      const cleanRelationships = validated.filter(
+        (rel) =>
+          rel.sourceConceptId !== rel.targetConceptId &&
+          validConceptIds.has(rel.sourceConceptId) &&
+          validConceptIds.has(rel.targetConceptId)
+      );
+
+      return cleanRelationships;
+    } catch (err: any) {
+      console.warn('Gemini generateConceptRelationships warning (fallback to empty list):', err?.message || err);
+      return [];
+    }
+  }
+
+  /**
+   * 7. Explore Concept Insights (AI Knowledge Discovery)
+   */
+  async exploreConcept(
+    conceptName: string,
+    conceptDesc: string,
+    lectureTitle: string,
+    transcriptSnippet: string
+  ) {
+    const prompt = getExploreConceptPrompt(conceptName, conceptDesc, lectureTitle, transcriptSnippet);
+    try {
+      const text = await this.generateContentWithFallback(prompt);
+      const rawJson = this.parseJSON<unknown>(text);
+      const validated = ConceptExplorationSchema.parse(rawJson);
+      return validated;
+    } catch (err: any) {
+      console.warn('Gemini exploreConcept fallback due to error:', err?.message || err);
+      return {
+        conceptName,
+        summary: conceptDesc,
+        prerequisites: [],
+        realWorldApplications: ['Academic problem solving and system analysis'],
+        suggestedQuestions: [`How does ${conceptName} relate to the broader principles in ${lectureTitle}?`],
+        keyInsights: [conceptDesc],
+      };
+    }
+  }
+
+  /**
    * AI Fallback: Generate structured educational transcript when video subtitles/captions are unavailable
    */
   async generateTranscriptForLecture(title: string): Promise<{
@@ -202,3 +266,4 @@ Include at least 15 detailed chronological segments covering introduction, found
 
 export const geminiService = new GeminiService();
 export default geminiService;
+

@@ -1,6 +1,8 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import path from 'path';
+import fs from 'fs';
 import config from './config';
 import prisma from './prisma';
 import authRoutes from './routes/auth';
@@ -105,10 +107,19 @@ app.get('/api/protected/test', requireAuth, (req: AuthRequest, res: Response) =>
   });
 });
 
-// 404 Handler
+// 404 Handler for API routes
 app.use('/api/*', (_req: Request, res: Response) => {
   res.status(404).json({ error: 'API endpoint not found' });
 });
+
+// Serve frontend static assets in production (Render unified deployment)
+const clientDistPath = path.resolve(__dirname, '../../client/dist');
+if (fs.existsSync(clientDistPath)) {
+  app.use(express.static(clientDistPath));
+  app.get('*', (_req: Request, res: Response) => {
+    res.sendFile(path.join(clientDistPath, 'index.html'));
+  });
+}
 
 // Global Error Handler
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {

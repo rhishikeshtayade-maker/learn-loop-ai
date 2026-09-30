@@ -43,6 +43,19 @@ export async function processLectureWithAI(lectureId: string, userId: string) {
     console.log(`[AI Pipeline] Saving ${conceptsData.length} concepts to database...`);
     const savedConcepts = await db.saveConcepts(lectureId, conceptsData);
 
+    // 5b. Generate & Save Concept Relationships for AI Knowledge Discovery Graph
+    console.log(`[AI Pipeline] Generating concept relationships for lecture ${lectureId}...`);
+    try {
+      const relationshipsData = await geminiService.generateConceptRelationships(
+        transcript,
+        savedConcepts.map((c) => ({ id: c.id, name: c.name, description: c.description }))
+      );
+      await db.saveConceptRelationships(lectureId, relationshipsData);
+      console.log(`[AI Pipeline] Saved ${relationshipsData.length} concept relationships for Knowledge Graph.`);
+    } catch (relErr: any) {
+      console.warn('[AI Pipeline] Concept relationships generation note:', relErr?.message || relErr);
+    }
+
     // 6. Generate Summary
     console.log(`[AI Pipeline] Step 2/5: Generating summary for lecture ${lectureId}...`);
     const summaryData = await geminiService.generateSummary(transcript);

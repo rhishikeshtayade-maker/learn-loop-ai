@@ -55,3 +55,31 @@ export const QuizQuestionSchema = z.object({
 });
 
 export const QuizQuestionsArraySchema = z.array(QuizQuestionSchema).min(1, 'At least 1 quiz question required');
+
+export const RelationshipTypeSchema = z.enum([
+  'PREREQUISITE',
+  'RELATED_TO',
+  'PART_OF',
+  'LEADS_TO',
+  'APPLICATION_OF',
+]);
+
+export const ConceptRelationshipSchema = z.object({
+  sourceConceptId: z.string().min(1, 'Source concept ID is required'),
+  targetConceptId: z.string().min(1, 'Target concept ID is required'),
+  relationshipType: RelationshipTypeSchema.catch('RELATED_TO'),
+  confidence: z.number().min(0).max(1).catch(0.9),
+  description: z.string().optional().default(''),
+});
+
+export const ConceptRelationshipsArraySchema = z.array(ConceptRelationshipSchema);
+
+export const ConceptExplorationSchema = z.object({
+  conceptName: z.string(),
+  summary: z.string(),
+  prerequisites: z.array(z.string()).default([]),
+  realWorldApplications: z.array(z.string()).default([]),
+  suggestedQuestions: z.array(z.string()).default([]),
+  keyInsights: z.array(z.string()).default([]),
+});
+
