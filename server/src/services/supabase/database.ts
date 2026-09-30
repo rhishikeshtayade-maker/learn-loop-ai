@@ -506,8 +506,9 @@ class SupabaseDatabaseService {
             })
             .eq('id', target.id);
           if (!error) continue;
-        } catch {
-          // Fall through to Prisma
+          throw new Error(`Supabase updateConceptExplanations failed: ${error.message}`);
+        } catch (e: any) {
+          throw new Error(`Supabase updateConceptExplanations exception: ${e.message}`);
         }
       }
 
@@ -807,10 +808,11 @@ class SupabaseDatabaseService {
           if (!qqErr && savedQuestions) {
             return { quiz: newQuiz, questions: savedQuestions };
           }
+          throw new Error(`Supabase saveQuiz questions failed: ${qqErr?.message}`);
         }
-        console.warn(`Supabase saveQuiz failed. Falling back to Prisma...`);
-      } catch (err) {
-        console.warn('Supabase saveQuiz exception, falling back to Prisma:', err);
+        throw new Error(`Supabase saveQuiz failed: ${qErr?.message}`);
+      } catch (err: any) {
+        throw new Error(`Supabase saveQuiz exception: ${err.message}`);
       }
     }
 
@@ -882,9 +884,14 @@ class SupabaseDatabaseService {
           if (!qqErr && questions) {
             return { quiz, questions };
           }
+          throw new Error(`Supabase getQuizQuestions failed: ${qqErr?.message}`);
         }
-      } catch {
-        // Fallback to Prisma
+        if (qErr && qErr.code === 'PGRST116') {
+          return null; // Quiz hasn't been generated yet
+        }
+        throw new Error(`Supabase getQuizByLecture failed: ${qErr?.message}`);
+      } catch (err: any) {
+        throw new Error(`Supabase exception: ${err.message}`);
       }
     }
 

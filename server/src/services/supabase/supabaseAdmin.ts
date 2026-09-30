@@ -23,8 +23,9 @@ export function getSupabaseAdmin(): SupabaseClient | null {
     return supabaseAdminClient;
   }
 
+  if (config.nodeEnv === 'production') {
+    throw new Error('Supabase URL or Service Role Key is missing in production environment variables.');
+  }
+
   return null;
 }
-
-export const supabaseAdmin = getSupabaseAdmin();
-
